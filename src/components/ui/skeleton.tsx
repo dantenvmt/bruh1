@@ -1,14 +1,12 @@
-import { cn } from "@/lib/utils"
+// NextUI Skeleton — drop-in replacement for shadcn Skeleton
+import { Skeleton as NextSkeleton } from '@nextui-org/react'
+import { cn } from '@/lib/utils'
 
-function Skeleton({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+function Skeleton({ className }: { className?: string }) {
   return (
-    <div
-      className={cn("animate-pulse rounded-md bg-muted", className)}
-      {...props}
-    />
+    <NextSkeleton className={cn('rounded-lg', className)}>
+      <div className="h-full w-full" />
+    </NextSkeleton>
   )
 }
 

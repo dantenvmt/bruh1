@@ -17,6 +17,11 @@ dist-ssr
 .env.*
 !.env.example
 
+# Playwright screenshots
+.playwright-mcp/
+*.png
+*.jpg
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

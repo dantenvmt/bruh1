@@ -1,57 +1,57 @@
-import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
-import { cva, type VariantProps } from "class-variance-authority"
+// NextUI Button — drop-in replacement for shadcn Button
+import type { ComponentProps } from 'react'
+import React from 'react'
+import { Button as NextButton } from '@nextui-org/react'
+import { cn } from '@/lib/utils'
 
-import { cn } from "@/lib/utils"
+type NextButtonProps = ComponentProps<typeof NextButton>
 
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-  {
-    variants: {
-      variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-[0_8px_24px_hsl(var(--primary)/0.35)] hover:brightness-110",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:brightness-110",
-        outline:
-          "border border-border bg-muted/30 text-foreground hover:border-primary/40 hover:bg-muted/60",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/85",
-        ghost: "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-)
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+interface ButtonProps extends Omit<NextButtonProps, 'variant' | 'size' | 'color'> {
+  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link'
+  size?: 'default' | 'sm' | 'lg' | 'icon'
   asChild?: boolean
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
-    return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref}
-        {...props}
-      />
-    )
+function mapVariant(variant?: string): { variant: NextButtonProps['variant']; color: NextButtonProps['color'] } {
+  switch (variant) {
+    case 'outline':    return { variant: 'bordered', color: 'default' }
+    case 'ghost':      return { variant: 'light',    color: 'default' }
+    case 'secondary':  return { variant: 'flat',     color: 'default' }
+    case 'destructive':return { variant: 'solid',    color: 'danger'  }
+    case 'link':       return { variant: 'light',    color: 'primary' }
+    default:           return { variant: 'solid',    color: 'primary' }
   }
-)
-Button.displayName = "Button"
+}
 
-export { Button, buttonVariants }
+function mapSize(size?: string): NextButtonProps['size'] {
+  switch (size) {
+    case 'sm':   return 'sm'
+    case 'lg':   return 'lg'
+    case 'icon': return 'sm'
+    default:     return 'md'
+  }
+}
+
+export function Button({ variant, size, className, asChild: _asChild, onClick, children, ...props }: ButtonProps & { onClick?: React.MouseEventHandler<HTMLButtonElement> }) {
+  const { variant: nVariant, color } = mapVariant(variant)
+  const nSize = mapSize(size)
+
+  return (
+    <NextButton
+      variant={nVariant}
+      color={color}
+      size={nSize}
+      onPress={onClick ? () => onClick({} as React.MouseEvent<HTMLButtonElement>) : undefined}
+      className={cn(
+        'font-semibold',
+        size === 'icon' && 'min-w-0 w-9 h-9 p-0',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </NextButton>
+  )
+}
+
+export { Button as default }

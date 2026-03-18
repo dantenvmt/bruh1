@@ -20,8 +20,18 @@ export interface Job {
   category: string | null;
   tags: string[] | null;
   skills: string[] | null;
+  experience_level: string | null;
+  experience_min_years: number | null;
+  experience_max_years: number | null;
+  required_skills: string[] | null;
+  industry: string | null;
+  work_mode: string | null;
   created_at: string | null; // ISO datetime string
   updated_at: string | null; // ISO datetime string
+  // AI-generated summaries (stored in DB, returned with every job)
+  ai_summary_card: string | null;
+  ai_summary_detail: JobSummaryResponse | null;
+  ai_summarized_at: string | null;
 }
 
 export interface JobsResponse {
@@ -44,53 +54,116 @@ export interface JobsQueryParams {
   location?: string | null;
   as_of?: string | null; // For stable pagination across same snapshot
   offset?: number; // Legacy offset pagination (current EC2)
+  profile_skills?: string;
+  profile_experience_years?: number | null;
+  user_id?: string | null;
 }
 
 export interface ApiError {
   detail: string;
 }
 
-export type CritiqueLevel = 'light' | 'balanced' | 'hardcore';
-
-export interface ResumeExtractResponse {
-  file_name: string;
-  text: string;
-  chars: number;
-  truncated: boolean;
+// Resume upload response
+export interface ResumeUploadResponse {
+  resume_id: string;
+  user_id: string;
+  extracted_text_preview: string;
+  filename: string | null;
+  extracted_skills: string[];
+  extracted_experience_years: number | null;
+  skills_extracted: boolean;
+  created_at: string;
 }
+
+// Job AI summary
+export interface JobSummaryResponse {
+  job_id: string;
+  summary_short: string;
+  summary_bullets: string[];
+  attention_tags: string[];
+}
+
+// Resume analysis (general critique)
+export type CritiqueLevel = 'light' | 'balanced' | 'hardcore';
 
 export interface ResumeAnalysisResponse {
   score: number;
   headline: string;
   strengths: string[];
   gaps: string[];
-  recommendations: string[];
   priority_actions: string[];
-  provider: string;
-  model: string;
 }
 
-export interface JobAiSummaryResponse {
-  job_id: string;
-  summary_short: string;
-  summary_bullets: string[];
-  summary_full: string;
-  attention_tags: string[];
-  provider: string;
-  model: string;
+// Resume match profile (extracted skills for scorer)
+export interface ResumeMatchProfile {
+  user_id: string;
+  skills: string[];
+  experience_years: number | null;
+  skills_extracted: boolean;
 }
 
-export interface ResumeOptimizeResponse {
+// Match score response (existing endpoint)
+export interface JobMatchResponse {
   job_id: string;
-  score_before: number;
-  score_after_estimate: number;
-  tailored_summary: string;
-  rewritten_bullets: string[];
-  missing_keywords: string[];
-  interview_focus: string[];
-  provider: string;
-  model: string;
+  match_score: number;
+  fit_band: string;
+  breakdown: Record<string, unknown>;
+  reasons: string[];
+  gaps: string[];
 }
+
+// Resume fetch response
+export interface ResumeGetResponse {
+  resume_id: string;
+  user_id: string;
+  raw_text: string;
+  filename: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Optimize mode
+export type OptimizeMode = 'bullets' | 'overview' | 'full_rewrite';
+
+// Bullet suggestion item
+export interface BulletSuggestion {
+  original: string;
+  improved: string;
+  reason: string;
+}
+
+// Overview suggestion object
+export interface OverviewSuggestion {
+  original_summary: string;
+  optimized_summary: string;
+  key_changes: string[];
+}
+
+// bullets mode response
+export interface OptimizeBulletsResponse {
+  job_id: string;
+  mode: 'bullets';
+  suggestions: BulletSuggestion[];
+}
+
+// overview mode response
+export interface OptimizeOverviewResponse {
+  job_id: string;
+  mode: 'overview';
+  suggestions: OverviewSuggestion;
+}
+
+// full_rewrite mode response
+export interface OptimizeFullRewriteResponse {
+  job_id: string;
+  mode: 'full_rewrite';
+  optimized_resume: string;
+}
+
+export type ResumeOptimizeResponse =
+  | OptimizeBulletsResponse
+  | OptimizeOverviewResponse
+  | OptimizeFullRewriteResponse;
 
 // Window type extension for runtime config
 declare global {

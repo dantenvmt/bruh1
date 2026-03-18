@@ -1,22 +1,32 @@
-import * as React from "react"
+// NextUI Input — drop-in replacement for shadcn Input
+import { Input as NextInput } from '@nextui-org/react'
+import type { ComponentProps, Ref } from 'react'
+import { forwardRef } from 'react'
+import { cn } from '@/lib/utils'
 
-import { cn } from "@/lib/utils"
+type NextInputProps = ComponentProps<typeof NextInput>
 
-const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, ...props }, ref) => {
+interface InputProps extends Omit<NextInputProps, 'ref'> {
+  ref?: Ref<HTMLInputElement>
+}
+
+const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ className, ...props }, _ref) => {
     return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-10 w-full rounded-md border border-input/80 bg-background/70 px-3 py-2 text-base text-foreground ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className
-        )}
-        ref={ref}
+      <NextInput
+        variant="bordered"
+        classNames={{
+          input: 'text-foreground text-sm',
+          inputWrapper: cn(
+            'border-border/60 bg-background/70 hover:border-primary/40 focus-within:!border-primary/60',
+            className
+          ),
+        }}
         {...props}
       />
     )
   }
 )
-Input.displayName = "Input"
+Input.displayName = 'Input'
 
 export { Input }

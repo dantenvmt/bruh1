@@ -6,69 +6,75 @@
   --font-display: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
     "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
-  --background: 226 28% 6%;
-  --foreground: 210 20% 95%;
-  --card: 224 22% 10%;
-  --card-foreground: 210 20% 95%;
-  --popover: 224 22% 10%;
-  --popover-foreground: 210 20% 95%;
+  --background: 14 18% 5%;
+  --foreground: 20 15% 95%;
+  --card: 16 14% 9%;
+  --card-foreground: 20 15% 95%;
+  --popover: 16 14% 9%;
+  --popover-foreground: 20 15% 95%;
 
-  --primary: 188 100% 47%;
-  --primary-foreground: 222 45% 8%;
+  /* Tinder flame: #FF6154 orange → #FD296B hot-pink */
+  --primary: 4 100% 66%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 223 18% 16%;
-  --secondary-foreground: 210 20% 95%;
+  /* flame-end for gradients */
+  --flame: 340 98% 58%;
 
-  --muted: 224 16% 14%;
-  --muted-foreground: 215 16% 66%;
+  --secondary: 16 12% 15%;
+  --secondary-foreground: 20 15% 95%;
 
-  --accent: 221 20% 18%;
-  --accent-foreground: 210 20% 95%;
+  --muted: 16 10% 13%;
+  --muted-foreground: 20 10% 60%;
+
+  --accent: 16 12% 17%;
+  --accent-foreground: 20 15% 95%;
 
   --destructive: 0 72% 54%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 223 16% 24%;
-  --input: 223 16% 24%;
-  --ring: 188 100% 47%;
+  --border: 16 10% 15%;
+  --input: 16 10% 15%;
+  --ring: 4 100% 66%;
 
   --radius: 1rem;
-  --chart-1: 188 100% 47%;
-  --chart-2: 216 80% 62%;
+  --chart-1: 4 100% 66%;
+  --chart-2: 340 98% 58%;
   --chart-3: 271 72% 63%;
   --chart-4: 40 92% 56%;
   --chart-5: 157 60% 43%;
 }
 
 .contrast {
-  --background: 226 35% 4%;
-  --foreground: 210 25% 98%;
-  --card: 224 28% 8%;
-  --card-foreground: 210 25% 98%;
-  --popover: 224 28% 8%;
-  --popover-foreground: 210 25% 98%;
+  --background: 14 22% 4%;
+  --foreground: 20 18% 98%;
+  --card: 16 18% 7%;
+  --card-foreground: 20 18% 98%;
+  --popover: 16 18% 7%;
+  --popover-foreground: 20 18% 98%;
 
-  --primary: 188 100% 56%;
-  --primary-foreground: 222 45% 8%;
+  --primary: 4 100% 70%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 224 18% 13%;
-  --secondary-foreground: 210 25% 98%;
+  --flame: 340 100% 64%;
 
-  --muted: 224 20% 10%;
-  --muted-foreground: 214 18% 74%;
+  --secondary: 16 14% 12%;
+  --secondary-foreground: 20 18% 98%;
 
-  --accent: 221 22% 16%;
-  --accent-foreground: 210 25% 98%;
+  --muted: 16 12% 9%;
+  --muted-foreground: 20 12% 76%;
+
+  --accent: 16 14% 15%;
+  --accent-foreground: 20 18% 98%;
 
   --destructive: 0 80% 52%;
   --destructive-foreground: 0 0% 100%;
 
-  --border: 221 18% 34%;
-  --input: 221 18% 34%;
-  --ring: 188 100% 56%;
+  --border: 16 14% 30%;
+  --input: 16 14% 30%;
+  --ring: 4 100% 70%;
 
-  --chart-1: 188 100% 56%;
-  --chart-2: 216 86% 68%;
+  --chart-1: 4 100% 70%;
+  --chart-2: 340 100% 64%;
   --chart-3: 271 80% 68%;
   --chart-4: 40 96% 60%;
   --chart-5: 157 70% 48%;
@@ -80,21 +86,23 @@
 
 html {
   height: 100%;
+  overflow-x: hidden;
 }
 
 body {
+  width: 100%;
   min-height: 100%;
   background-color: hsl(var(--background));
   background-image:
     radial-gradient(
-      980px 680px at -12% -14%,
-      hsl(var(--primary) / 0.16),
-      transparent 62%
+      900px 600px at -10% -12%,
+      hsl(4 100% 66% / 0.12),
+      transparent 60%
     ),
     radial-gradient(
-      760px 520px at 108% -10%,
-      hsl(235 76% 62% / 0.1),
-      transparent 64%
+      700px 480px at 110% -8%,
+      hsl(340 98% 58% / 0.08),
+      transparent 62%
     );
   background-repeat: no-repeat;
   background-attachment: fixed;
@@ -109,14 +117,14 @@ body {
   background-color: hsl(var(--background));
   background-image:
     radial-gradient(
-      1080px 720px at -12% -14%,
-      hsl(var(--primary) / 0.2),
-      transparent 60%
+      1000px 680px at -10% -12%,
+      hsl(4 100% 70% / 0.15),
+      transparent 58%
     ),
     radial-gradient(
-      760px 520px at 108% -10%,
-      hsl(235 86% 68% / 0.12),
-      transparent 66%
+      700px 480px at 110% -8%,
+      hsl(340 100% 64% / 0.10),
+      transparent 62%
     );
   background-repeat: no-repeat;
   background-attachment: fixed;
@@ -129,4 +137,32 @@ body {
 
 ::selection {
   background: hsl(var(--primary) / 0.18);
+}
+
+/* Themed scrollbar — global */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.6);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }

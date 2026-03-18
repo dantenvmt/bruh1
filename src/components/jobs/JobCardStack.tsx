@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion, type PanInfo, useMotionValue, useTransform } from 'framer-motion';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, animate, motion, type PanInfo, useMotionValue, useTransform } from 'framer-motion';
 import { formatDistanceToNow } from 'date-fns';
-import { Bookmark, BookmarkCheck, ChevronUp, Clock3, DollarSign, Heart, MapPin, Sparkles, WandSparkles, X } from 'lucide-react';
+import { Bookmark, BookmarkCheck, ChevronUp, Clock3, DollarSign, Heart, Loader2, MapPin, Sparkles, WandSparkles, X } from 'lucide-react';
 
 import type { Job } from '@/api/types';
 import { Badge } from '@/components/ui/badge';
@@ -30,12 +30,17 @@ interface JobCardStackProps {
   isJobSaved: (job: Job) => boolean;
   onOptimizeRole: (job: Job) => void;
   resumeReady: boolean;
+  isFetchingNextPage?: boolean;
+  isAnimating?: boolean;
 }
 
-const SWIPE_X_THRESHOLD_PX = 110;
-const SWIPE_Y_THRESHOLD_PX = 110;
+const SWIPE_X_THRESHOLD_PX = 80;
+const SWIPE_VELOCITY_THRESHOLD = 500;
 const LONG_PRESS_MS = 420;
 const LONG_PRESS_MOVE_CANCEL_PX = 10;
+const DRAG_ELASTIC = 0.15;
+const DRAG_STIFFNESS = 200;
+const DRAG_DAMPING = 22;
 
 function formatPosted(dateString: string | null): string {
   if (!dateString) return 'Recently';
@@ -110,9 +115,15 @@ function JobSwipeCard({
   return (
     <Card
       className={cn(
-        'relative h-full w-full rounded-[2rem] border border-border/70 bg-card/90 p-6 shadow-2xl shadow-black/25',
-        'backdrop-blur-sm transition-all active:shadow-2xl cursor-pointer'
+        'relative h-full w-full rounded-[2rem] border-0 bg-card/95 p-6 shadow-2xl shadow-black/50',
+        'backdrop-blur-sm transition-all cursor-pointer',
+        // flame gradient border via pseudo-element workaround using outline + ring
+        '[background-clip:padding-box]',
+        'ring-1 ring-white/[0.07]',
       )}
+      style={{
+        boxShadow: '0 0 0 1px rgba(255,97,84,0.18), 0 25px 50px -12px rgba(0,0,0,0.6), 0 8px 24px rgba(253,41,107,0.06)',
+      }}
       onClick={onOpen}
       role="button"
       tabIndex={0}
@@ -211,12 +222,9 @@ function JobSwipeCard({
           Optimize for role
         </button>
 
-        <div className="mt-auto pt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <Clock3 className="h-3.5 w-3.5" />
-            <span>{postedLabel}</span>
-          </div>
-          <span>Right match / Left ignore / Hold snapshot</span>
+        <div className="mt-auto pt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock3 className="h-3.5 w-3.5" />
+          <span>{postedLabel}</span>
         </div>
       </div>
 
@@ -265,9 +273,11 @@ export function JobCardStack({
   isJobSaved,
   onOptimizeRole,
   resumeReady,
+  isFetchingNextPage,
+  isAnimating = false,
 }: JobCardStackProps) {
-  const [exitDir, setExitDir] = useState<SwipeDirection>('left');
   const [snapshotVisible, setSnapshotVisible] = useState(false);
+  const isFlyingRef = useRef(false);
 
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -277,6 +287,17 @@ export function JobCardStack({
   const next = jobs[index + 1] ?? null;
 
   const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const opacity = useMotionValue(1);
+
+  // Reset motion values when card changes
+  useEffect(() => {
+    x.set(0);
+    y.set(0);
+    opacity.set(1);
+    isFlyingRef.current = false;
+  }, [index, x, y, opacity]);
+
   const rotate = useTransform(x, [-260, 0, 260], [-12, 0, 12]);
   const scale = useTransform(x, [-240, 0, 240], [0.985, 1, 0.985]);
   const likeOpacity = useTransform(x, [40, SWIPE_X_THRESHOLD_PX], [0, 1]);
@@ -284,14 +305,14 @@ export function JobCardStack({
 
   const canShowControls = useMemo(() => Boolean(current), [current]);
 
-  const clearLongPressTimer = () => {
+  const clearLongPressTimer = useCallback(() => {
     if (pressTimerRef.current) {
       clearTimeout(pressTimerRef.current);
       pressTimerRef.current = null;
     }
-  };
+  }, []);
 
-  useEffect(() => () => clearLongPressTimer(), []);
+  useEffect(() => () => clearLongPressTimer(), [clearLongPressTimer]);
 
   const handlePressStart = (clientX: number, clientY: number) => {
     if (!current) return;
@@ -315,11 +336,11 @@ export function JobCardStack({
     }
   };
 
-  const handlePressEnd = () => {
+  const handlePressEnd = useCallback(() => {
     clearLongPressTimer();
     pressStartRef.current = null;
     setSnapshotVisible(false);
-  };
+  }, [clearLongPressTimer]);
 
   const handleOpenDetails = () => {
     if (!current) return;
@@ -330,35 +351,52 @@ export function JobCardStack({
     onDetails(current);
   };
 
-  const handleDecision = (direction: SwipeDirection) => {
-    if (!current) return;
+  // Fling the card off-screen via motion values, THEN advance
+  const handleDecision = useCallback(async (direction: SwipeDirection, job: Job) => {
+    if (isFlyingRef.current) return;
+    isFlyingRef.current = true;
     handlePressEnd();
-    setExitDir(direction);
-    if (direction === 'right') onSave(current);
-    if (direction === 'left') onDismiss(current);
+
+    const targetX = direction === 'right' ? 500 : -500;
+
+    await Promise.all([
+      animate(x, targetX, { duration: 0.22, ease: 'easeOut' }),
+      animate(opacity, 0, { duration: 0.22, ease: 'easeOut' }),
+    ]);
+
+    if (direction === 'right') onSave(job);
+    else onDismiss(job);
     onAdvance();
-  };
+  }, [x, opacity, handlePressEnd, onSave, onDismiss, onAdvance]);
 
   const handleDragEnd = (_: unknown, info: PanInfo) => {
     if (!current) return;
     handlePressEnd();
 
-    if (info.offset.y < -SWIPE_Y_THRESHOLD_PX) {
-      onDetails(current);
+    const swipedRight =
+      info.offset.x > SWIPE_X_THRESHOLD_PX || info.velocity.x > SWIPE_VELOCITY_THRESHOLD;
+    const swipedLeft =
+      info.offset.x < -SWIPE_X_THRESHOLD_PX || info.velocity.x < -SWIPE_VELOCITY_THRESHOLD;
+
+    if (swipedRight) {
+      void handleDecision('right', current);
       return;
     }
-
-    if (info.offset.x > SWIPE_X_THRESHOLD_PX) {
-      handleDecision('right');
+    if (swipedLeft) {
+      void handleDecision('left', current);
       return;
-    }
-
-    if (info.offset.x < -SWIPE_X_THRESHOLD_PX) {
-      handleDecision('left');
     }
   };
 
   if (!current) {
+    if (isFetchingNextPage) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-4" />
+          <div className="text-sm text-muted-foreground">Loading more jobs...</div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <div className="relative mb-6">
@@ -377,7 +415,7 @@ export function JobCardStack({
 
   return (
     <div className="w-full max-w-[22rem] mx-auto">
-      <div className="relative h-[80vh] max-h-[56rem] min-h-[36rem]">
+      <div className="relative h-[480px]">
         {next && (
           <div className="absolute inset-0 translate-y-2 scale-[0.985] opacity-70">
             <JobSwipeCard
@@ -392,68 +430,59 @@ export function JobCardStack({
           </div>
         )}
 
-        <AnimatePresence initial={false} mode="popLayout">
-          <motion.div
-            key={current.id}
-            className="absolute inset-0"
-            style={{ x, rotate, scale, touchAction: 'none' }}
-            drag={!snapshotVisible}
-            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            dragElastic={0.25}
-            dragMomentum
-            dragTransition={{ bounceStiffness: 240, bounceDamping: 26 }}
-            onDragStart={() => {
-              clearLongPressTimer();
-              setSnapshotVisible(false);
-            }}
-            onDragEnd={handleDragEnd}
-            onPointerDownCapture={(e) => handlePressStart(e.clientX, e.clientY)}
-            onPointerMoveCapture={(e) => handlePressMove(e.clientX, e.clientY)}
-            onPointerUpCapture={handlePressEnd}
-            onPointerCancelCapture={handlePressEnd}
-            initial={{ opacity: 0, scale: 0.97, y: 14 }}
-            animate={{
-              opacity: 1,
-              scale: 1,
-              y: 0,
-              transition: { type: 'spring', stiffness: 250, damping: 24, mass: 0.8 },
-            }}
-            exit={{
-              x: exitDir === 'right' ? 420 : -420,
-              rotate: exitDir === 'right' ? 14 : -14,
-              opacity: 0,
-              transition: { duration: 0.24, ease: 'easeOut' },
-            }}
-            whileDrag={{ scale: 1.015 }}
-          >
+        <motion.div
+          key={current.id}
+          className="absolute inset-0"
+          style={{ x, rotate, scale, opacity, touchAction: 'none' }}
+          drag={!snapshotVisible && !isAnimating && !isFlyingRef.current ? 'x' : false}
+          dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+          dragElastic={DRAG_ELASTIC}
+          dragMomentum
+          dragTransition={{ bounceStiffness: DRAG_STIFFNESS, bounceDamping: DRAG_DAMPING }}
+          onDragStart={() => {
+            clearLongPressTimer();
+            setSnapshotVisible(false);
+          }}
+          onDragEnd={handleDragEnd}
+          onPointerDownCapture={(e) => handlePressStart(e.clientX, e.clientY)}
+          onPointerMoveCapture={(e) => handlePressMove(e.clientX, e.clientY)}
+          onPointerUpCapture={handlePressEnd}
+          onPointerCancelCapture={handlePressEnd}
+          initial={{ opacity: 0, scale: 0.97, y: 14 }}
+          animate={{
+            scale: 1,
+            y: 0,
+            transition: { type: 'spring', stiffness: 280, damping: 28, mass: 0.75 },
+          }}
+          whileDrag={{ scale: 1.01 }}
+        >
           <div className="pointer-events-none absolute left-5 top-5 z-10">
             <motion.div
-              className="rounded-md border border-emerald-400/60 bg-emerald-500/20 px-3 py-2 text-sm font-semibold text-emerald-200"
-              style={{ opacity: likeOpacity }}
+              className="rounded-xl border-2 border-emerald-400 px-4 py-1.5 text-base font-black uppercase tracking-widest text-emerald-300"
+              style={{ opacity: likeOpacity, rotate: -15, textShadow: '0 0 20px rgba(52,211,153,0.5)' }}
             >
               MATCH
             </motion.div>
           </div>
           <div className="pointer-events-none absolute right-5 top-5 z-10">
             <motion.div
-              className="rounded-md border border-rose-400/60 bg-rose-500/20 px-3 py-2 text-sm font-semibold text-rose-200"
-              style={{ opacity: nopeOpacity }}
+              className="rounded-xl border-2 border-rose-400 px-4 py-1.5 text-base font-black uppercase tracking-widest text-rose-300"
+              style={{ opacity: nopeOpacity, rotate: 15, textShadow: '0 0 20px rgba(251,113,133,0.5)' }}
             >
-              IGNORE
-              </motion.div>
-            </div>
+              NOPE
+            </motion.div>
+          </div>
 
-            <JobSwipeCard
-              job={current}
-              saved={isJobSaved(current)}
-              onOpen={handleOpenDetails}
-              snapshotVisible={snapshotVisible}
-              onToggleSaved={() => onToggleSaved(current)}
-              onOptimizeRole={() => onOptimizeRole(current)}
-              resumeReady={resumeReady}
-            />
-          </motion.div>
-        </AnimatePresence>
+          <JobSwipeCard
+            job={current}
+            saved={isJobSaved(current)}
+            onOpen={handleOpenDetails}
+            snapshotVisible={snapshotVisible}
+            onToggleSaved={() => onToggleSaved(current)}
+            onOptimizeRole={() => onOptimizeRole(current)}
+            resumeReady={resumeReady}
+          />
+        </motion.div>
       </div>
 
       {canShowControls && (
@@ -461,7 +490,7 @@ export function JobCardStack({
           <Button
             variant="outline"
             className="h-12 transition-all hover:border-rose-400/60 hover:text-rose-300 hover:bg-rose-500/10"
-            onClick={() => handleDecision('left')}
+            onClick={() => void handleDecision('left', current)}
             aria-label="Ignore job"
           >
             <X />
@@ -477,8 +506,9 @@ export function JobCardStack({
             Details
           </Button>
           <Button
-            className="h-12 bg-emerald-600 hover:bg-emerald-600/90 shadow-lg shadow-emerald-600/30 transition-all hover:scale-105"
-            onClick={() => handleDecision('right')}
+            className="h-12 border-0 text-white font-semibold shadow-lg transition-all hover:scale-105 hover:brightness-110"
+            style={{ background: 'linear-gradient(135deg, #FF6154, #FD296B)', boxShadow: '0 4px 20px rgba(253,41,107,0.35)' }}
+            onClick={() => void handleDecision('right', current)}
             aria-label="Match job"
           >
             <Heart className="fill-white" />

@@ -1,8 +1,6 @@
-import { X, MapPin } from 'lucide-react';
+import { MapPin } from 'lucide-react';
+import { Button, Chip, Input } from '@nextui-org/react';
 import { SearchBar } from './SearchBar';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -54,14 +52,19 @@ export function FilterBar({ filters, onChange, className }: FilterBarProps) {
 
         {/* Location */}
         <div className="relative sm:w-48">
-          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             type="text"
             placeholder="Location"
             value={filters.location}
-            onChange={(e) => onChange({ ...filters, location: e.target.value })}
-            className="pl-9"
+            onValueChange={(location) => onChange({ ...filters, location })}
+            variant="bordered"
+            size="sm"
+            startContent={<MapPin className="h-4 w-4 text-muted-foreground shrink-0" />}
             aria-label="Filter by location"
+            classNames={{
+              input: "text-foreground text-sm",
+              inputWrapper: "border-white/10 bg-white/5 hover:bg-white/10 data-[focus=true]:border-primary/50 h-10",
+            }}
           />
         </div>
 
@@ -69,7 +72,9 @@ export function FilterBar({ filters, onChange, className }: FilterBarProps) {
         <div className="sm:w-44">
           <Select
             value={filters.source || '__all__'}
-            onValueChange={(source: string) => onChange({ ...filters, source: source === '__all__' ? '' : source })}
+            onValueChange={(source: string) =>
+              onChange({ ...filters, source: source === '__all__' ? '' : source })
+            }
           >
             <SelectTrigger aria-label="Filter by job source">
               <SelectValue placeholder="All sources" />
@@ -91,66 +96,70 @@ export function FilterBar({ filters, onChange, className }: FilterBarProps) {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Remote toggle */}
           <Button
-            variant={filters.remote ? 'default' : 'outline'}
+            variant={filters.remote ? 'solid' : 'bordered'}
+            color={filters.remote ? 'primary' : 'default'}
             size="sm"
-            onClick={() => onChange({ ...filters, remote: !filters.remote })}
+            onPress={() => onChange({ ...filters, remote: !filters.remote })}
             className={cn(
-              'h-8 border-border/70 transition-all duration-300',
+              'h-8 transition-all duration-300',
               filters.remote && 'shadow-lg shadow-primary/25',
-              !filters.remote && 'hover:border-primary/50 hover:bg-muted/60 hover:text-primary'
+              !filters.remote && 'border-white/20 text-foreground hover:border-primary/50 hover:text-primary'
             )}
             aria-pressed={filters.remote}
           >
             Remote only
           </Button>
 
-          {/* Active filter badges */}
+          {/* Active filter chips */}
           {filters.q && (
-            <Badge variant="secondary" className="gap-1">
+            <Chip
+              variant="flat"
+              size="sm"
+              onClose={() => onChange({ ...filters, q: '' })}
+              classNames={{
+                base: "bg-white/5 border border-white/10 text-foreground",
+                closeButton: "text-muted-foreground hover:text-foreground",
+              }}
+            >
               Search: {filters.q.slice(0, 20)}
               {filters.q.length > 20 && '...'}
-              <button
-                onClick={() => onChange({ ...filters, q: '' })}
-                className="ml-1 hover:bg-background/20 rounded-full"
-                aria-label="Clear search filter"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
+            </Chip>
           )}
           {filters.location && (
-            <Badge variant="secondary" className="gap-1">
+            <Chip
+              variant="flat"
+              size="sm"
+              onClose={() => onChange({ ...filters, location: '' })}
+              classNames={{
+                base: "bg-white/5 border border-white/10 text-foreground",
+                closeButton: "text-muted-foreground hover:text-foreground",
+              }}
+            >
               Location: {filters.location}
-              <button
-                onClick={() => onChange({ ...filters, location: '' })}
-                className="ml-1 hover:bg-background/20 rounded-full"
-                aria-label="Clear location filter"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
+            </Chip>
           )}
           {filters.source && (
-            <Badge variant="secondary" className="gap-1">
+            <Chip
+              variant="flat"
+              size="sm"
+              onClose={() => onChange({ ...filters, source: '' })}
+              classNames={{
+                base: "bg-white/5 border border-white/10 text-foreground",
+                closeButton: "text-muted-foreground hover:text-foreground",
+              }}
+            >
               Source: {JOB_SOURCES.find((s) => s.value === filters.source)?.label}
-              <button
-                onClick={() => onChange({ ...filters, source: '' })}
-                className="ml-1 hover:bg-background/20 rounded-full"
-                aria-label="Clear source filter"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
+            </Chip>
           )}
         </div>
 
         {/* Clear all button */}
         {hasActiveFilters && (
           <Button
-            variant="ghost"
+            variant="light"
             size="sm"
-            onClick={handleClearFilters}
-            className="h-8 transition-all hover:bg-destructive/10 hover:text-destructive"
+            onPress={handleClearFilters}
+            className="h-8 text-muted-foreground transition-all hover:bg-destructive/10 hover:text-destructive"
           >
             Clear all filters
           </Button>

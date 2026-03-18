@@ -2,34 +2,32 @@ import { useEffect, useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { parseAsBoolean, parseAsString, useQueryState } from 'nuqs';
 import {
-  BarChart3,
-  Bookmark,
-  Compass,
-  LayoutGrid,
+  ChevronDown,
   Loader2,
-  ShieldCheck,
-  Sparkles,
+  WandSparkles,
 } from 'lucide-react';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 import { api } from '@/api/client';
 import type {
   CritiqueLevel,
   Job,
-  JobAiSummaryResponse,
+  JobMatchResponse,
+  OptimizeMode,
   ResumeAnalysisResponse,
+  ResumeMatchProfile,
   ResumeOptimizeResponse,
 } from '@/api/types';
-import { FilterBar, type FilterState } from '@/components/filters/FilterBar';
-import { FilterSheet } from '@/components/filters/FilterSheet';
+import { type FilterState } from '@/components/filters/FilterBar';
+import { JobCarousel } from '@/components/jobs/JobCarousel';
 import { JobCardStack } from '@/components/jobs/JobCardStack';
 import { JobDetailDialog } from '@/components/jobs/JobDetailDialog';
 import { JobGrid } from '@/components/jobs/JobGrid';
-import { SavedJobsSheet } from '@/components/jobs/SavedJobsSheet';
+import { TopBar } from '@/components/layout/TopBar';
 import { ResumeLabPanel } from '@/components/resume/ResumeLabPanel';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useJobsList } from '@/hooks/useJobs';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { useRecommendedJobs } from '@/hooks/useRecommendedJobs';
 import { useSavedJobs } from '@/hooks/useSavedJobs';
 import { cn } from '@/lib/utils';
 
@@ -44,12 +42,22 @@ const queryClient = new QueryClient({
 });
 
 const CONTRAST_STORAGE_KEY = 'job_feed_high_contrast';
-const GUEST_RESUME_SESSION_KEY = 'job_feed_guest_resume_v1';
+const GUEST_USER_ID_KEY = 'guest_user_id';
+const DEFAULT_OPTIMIZE_MODE: OptimizeMode = 'bullets';
 const DEFAULT_CRITIQUE_LEVEL: CritiqueLevel = 'balanced';
+
+function getOrCreateGuestUserId(): string {
+  if (typeof window === 'undefined') return 'guest';
+  const stored = window.sessionStorage.getItem(GUEST_USER_ID_KEY);
+  if (stored) return stored;
+  const id = crypto.randomUUID();
+  window.sessionStorage.setItem(GUEST_USER_ID_KEY, id);
+  return id;
+}
 
 type GuestResumeState = {
   fileName: string | null;
-  text: string;
+  uploaded: boolean; // true once successfully uploaded to backend
 };
 
 function getInitialContrastMode(): boolean {
@@ -57,118 +65,34 @@ function getInitialContrastMode(): boolean {
   return window.localStorage.getItem(CONTRAST_STORAGE_KEY) === 'true';
 }
 
-function readGuestResumeState(): GuestResumeState {
-  if (typeof window === 'undefined') return { fileName: null, text: '' };
-  const raw = window.sessionStorage.getItem(GUEST_RESUME_SESSION_KEY);
-  if (!raw) return { fileName: null, text: '' };
-  try {
-    const parsed = JSON.parse(raw) as GuestResumeState;
-    return {
-      fileName: parsed.fileName || null,
-      text: parsed.text || '',
-    };
-  } catch {
-    return { fileName: null, text: '' };
-  }
-}
-
-function SwipeFeed({
-  jobs,
-  isLoading,
-  isFetchingNextPage,
-  hasNextPage,
-  fetchNextPage,
-  onSave,
-  onToggleSaved,
-  onOptimizeRole,
-  onDetails,
-  isJobSaved,
-  resumeReady,
-}: {
-  jobs: Job[];
-  isLoading: boolean;
-  isFetchingNextPage: boolean;
-  hasNextPage: boolean;
-  fetchNextPage: () => void | Promise<unknown>;
-  onSave: (job: Job) => void;
-  onToggleSaved: (job: Job) => void;
-  onOptimizeRole: (job: Job) => void;
-  onDetails: (job: Job) => void;
-  isJobSaved: (job: Job) => boolean;
-  resumeReady: boolean;
-}) {
-  const [swipeIndex, setSwipeIndex] = useState(0);
-
-  useEffect(() => {
-    setSwipeIndex((prev) => {
-      if (jobs.length <= 0) return 0;
-      return Math.min(prev, jobs.length - 1);
-    });
-  }, [jobs.length]);
-
-  useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage && swipeIndex + 6 >= jobs.length) {
-      void fetchNextPage();
-    }
-  }, [swipeIndex, jobs.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  const handleAdvanceSwipe = () => {
-    setSwipeIndex((prev) => prev + 1);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="ml-2">Loading feed...</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <JobCardStack
-        jobs={jobs}
-        index={swipeIndex}
-        onAdvance={handleAdvanceSwipe}
-        onSave={onSave}
-        onToggleSaved={onToggleSaved}
-        onDismiss={() => {}}
-        onDetails={onDetails}
-        isJobSaved={isJobSaved}
-        onOptimizeRole={onOptimizeRole}
-        resumeReady={resumeReady}
-      />
-
-      <div className="text-center text-xs text-muted-foreground">
-        Loaded {jobs.length} jobs{hasNextPage ? ' (more available)' : ''}.
-      </div>
-    </div>
-  );
-}
 
 function JobsPage() {
-  const isMobile = useMediaQuery('(max-width: 767px)');
-  const [mobileMode, setMobileMode] = useState<'swipe' | 'list'>('swipe');
-  const [highContrast, setHighContrast] = useState<boolean>(getInitialContrastMode);
+  const [highContrast] = useState<boolean>(getInitialContrastMode);
+  const [activePage, setActivePage] = useState<'home' | 'feed' | 'recommended'>('home');
+  const isMobile = useMediaQuery('(max-width: 639px)');
+  const [swipeIndex, setSwipeIndex] = useState(0);
 
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [guestResume, setGuestResume] = useState<GuestResumeState>(readGuestResumeState);
+  const [guestResume, setGuestResume] = useState<GuestResumeState>({ fileName: null, uploaded: false });
+  const [optimizeMode, setOptimizeMode] = useState<OptimizeMode>(DEFAULT_OPTIMIZE_MODE);
   const [critiqueLevel, setCritiqueLevel] = useState<CritiqueLevel>(DEFAULT_CRITIQUE_LEVEL);
-  const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysisResponse | null>(null);
   const [resumeErrorMessage, setResumeErrorMessage] = useState<string | null>(null);
-  const [isResumeExtracting, setIsResumeExtracting] = useState(false);
+  const [isResumeUploading, setIsResumeUploading] = useState(false);
+  const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysisResponse | null>(null);
   const [isResumeAnalyzing, setIsResumeAnalyzing] = useState(false);
-  const [jobSummaryById, setJobSummaryById] = useState<Record<string, JobAiSummaryResponse>>({});
-  const [summaryLoadingById, setSummaryLoadingById] = useState<Record<string, boolean>>({});
+  const [resumeMatchProfile, setResumeMatchProfile] = useState<ResumeMatchProfile | null>(null);
+  const [jobMatchScoreById, setJobMatchScoreById] = useState<Record<string, JobMatchResponse>>({});
+  const [matchScoreLoadingById, setMatchScoreLoadingById] = useState<Record<string, boolean>>({});
   const [jobOptimizationById, setJobOptimizationById] = useState<Record<string, ResumeOptimizeResponse>>({});
   const [optimizationLoadingById, setOptimizationLoadingById] = useState<Record<string, boolean>>({});
+  const [resumeLabOpen, setResumeLabOpen] = useState(false);
+  const guestUserId = useMemo(() => getOrCreateGuestUserId(), []);
 
   const [q, setQ] = useQueryState('q', parseAsString);
-  const [location, setLocation] = useQueryState('location', parseAsString);
-  const [source, setSource] = useQueryState('source', parseAsString);
-  const [remote, setRemote] = useQueryState('remote', parseAsBoolean);
+  const [location] = useQueryState('location', parseAsString);
+  const [source] = useQueryState('source', parseAsString);
+  const [remote] = useQueryState('remote', parseAsBoolean);
 
   const filters: FilterState = useMemo(
     () => ({
@@ -179,13 +103,6 @@ function JobsPage() {
     }),
     [q, location, source, remote]
   );
-
-  const setFilters = (next: FilterState) => {
-    setQ(next.q ? next.q : null);
-    setLocation(next.location ? next.location : null);
-    setSource(next.source ? next.source : null);
-    setRemote(next.remote ? true : null);
-  };
 
   const queryParams = useMemo(
     () => ({
@@ -199,7 +116,6 @@ function JobsPage() {
 
   const {
     jobs,
-    asOf,
     isLoading,
     isError,
     error,
@@ -209,80 +125,99 @@ function JobsPage() {
     refetch,
   } = useJobsList(queryParams);
 
-  const { savedJobs, savedCount, isJobSaved, saveJob, unsaveJob, toggleSaved, clearAll } =
+  const recommendedParams = useMemo(() => {
+    const base = { ...queryParams };
+    if (resumeMatchProfile?.skills_extracted && resumeMatchProfile.skills.length > 0) {
+      const normalizedSkills = [...new Set(
+        resumeMatchProfile.skills.map(s => s.trim()).filter(Boolean)
+      )].join(',');
+      return {
+        ...base,
+        profile_skills: normalizedSkills,
+        profile_experience_years: resumeMatchProfile.experience_years ?? undefined,
+        user_id: guestUserId,
+      };
+    }
+    return base;
+  }, [queryParams, resumeMatchProfile, guestUserId]);
+
+  const {
+    jobs: recommendedJobs,
+    isLoading: recommendedLoading,
+  } = useRecommendedJobs(recommendedParams);
+
+  const { isJobSaved, toggleSaved } =
     useSavedJobs();
 
-  const mode = isMobile ? mobileMode : 'list';
-  const feedKey = useMemo(
-    () => JSON.stringify([filters.q, filters.location, filters.source, filters.remote]),
-    [filters.q, filters.location, filters.source, filters.remote]
-  );
-
   const getJobKey = (job: Job) => job.id;
-  const resumeReady = Boolean(guestResume.text.trim());
+  const resumeUploaded = guestResume.uploaded;
 
-  const persistGuestResume = (next: GuestResumeState) => {
-    setGuestResume(next);
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(GUEST_RESUME_SESSION_KEY, JSON.stringify(next));
-    }
-  };
-
-  const ensureJobSummary = async (job: Job) => {
+  const ensureMatchScore = async (job: Job, profile: ResumeMatchProfile) => {
+    if (!profile.skills_extracted) return;
     const key = getJobKey(job);
-    if (jobSummaryById[key] || summaryLoadingById[key]) return;
-    setSummaryLoadingById((prev) => ({ ...prev, [key]: true }));
+    if (jobMatchScoreById[key] || matchScoreLoadingById[key]) return;
+    setMatchScoreLoadingById((prev) => ({ ...prev, [key]: true }));
     try {
-      const summary = await api.ai.summary(job.id);
-      setJobSummaryById((prev) => ({ ...prev, [key]: summary }));
+      const score = await api.jobs.matchScore(job.id, profile.skills, profile.experience_years);
+      setJobMatchScoreById((prev) => ({ ...prev, [key]: score }));
     } catch {
-      // Keep UI responsive with no hard failure.
+      // Non-fatal
     } finally {
-      setSummaryLoadingById((prev) => ({ ...prev, [key]: false }));
+      setMatchScoreLoadingById((prev) => ({ ...prev, [key]: false }));
     }
   };
 
   const openDetails = (job: Job) => {
     setSelectedJob(job);
     setDetailOpen(true);
-    void ensureJobSummary(job);
+    if (resumeMatchProfile) void ensureMatchScore(job, resumeMatchProfile);
   };
 
   const handleResumeUpload = async (file: File) => {
     setResumeErrorMessage(null);
-    setIsResumeExtracting(true);
+    setIsResumeUploading(true);
     try {
-      const extracted = await api.ai.extractResume(file);
-      persistGuestResume({
-        fileName: extracted.file_name || file.name,
-        text: extracted.text || '',
-      });
+      const result = await api.resume.upload(guestUserId, file);
+      setGuestResume({ fileName: result.filename || file.name, uploaded: true });
+      setJobOptimizationById({});
+      setJobMatchScoreById({});
       setResumeAnalysis(null);
-      if (!extracted.text?.trim()) {
-        setResumeErrorMessage('Could not extract readable text from this file.');
+
+      if (!result.skills_extracted) {
+        setResumeErrorMessage(
+          'Resume uploaded, but skills could not be extracted (Groq not configured). ' +
+          'Optimize for role and job summary features still work.'
+        );
+      }
+
+      // Fetch the match profile so we can score jobs automatically
+      try {
+        const profile = await api.resume.matchProfile(guestUserId);
+        setResumeMatchProfile(profile);
+      } catch {
+        // Non-fatal
       }
     } catch (err) {
       setResumeErrorMessage(err instanceof Error ? err.message : 'Resume upload failed.');
     } finally {
-      setIsResumeExtracting(false);
+      setIsResumeUploading(false);
     }
   };
 
   const handleClearResume = () => {
-    persistGuestResume({ fileName: null, text: '' });
-    setResumeAnalysis(null);
+    setGuestResume({ fileName: null, uploaded: false });
     setResumeErrorMessage(null);
+    setResumeAnalysis(null);
+    setResumeMatchProfile(null);
+    setJobOptimizationById({});
+    setJobMatchScoreById({});
   };
 
   const handleAnalyzeResume = async () => {
-    if (!resumeReady) {
-      setResumeErrorMessage('Upload a resume first.');
-      return;
-    }
     setResumeErrorMessage(null);
     setIsResumeAnalyzing(true);
     try {
-      const result = await api.ai.analyzeResume(guestResume.text, critiqueLevel);
+      const result = await api.resume.analyze(guestUserId, critiqueLevel);
       setResumeAnalysis(result);
     } catch (err) {
       setResumeErrorMessage(err instanceof Error ? err.message : 'Resume analysis failed.');
@@ -292,7 +227,7 @@ function JobsPage() {
   };
 
   const handleOptimizeForRole = async (job: Job) => {
-    if (!resumeReady) {
+    if (!resumeUploaded) {
       setResumeErrorMessage('Upload a resume in Resume Lab before role optimization.');
       return;
     }
@@ -300,9 +235,8 @@ function JobsPage() {
     setOptimizationLoadingById((prev) => ({ ...prev, [key]: true }));
     setResumeErrorMessage(null);
     try {
-      const result = await api.ai.optimizeResumeForJob(job.id, guestResume.text, critiqueLevel);
+      const result = await api.resume.optimize(job.id, guestUserId, optimizeMode);
       setJobOptimizationById((prev) => ({ ...prev, [key]: result }));
-      openDetails(job);
     } catch (err) {
       setResumeErrorMessage(err instanceof Error ? err.message : 'Role optimization failed.');
     } finally {
@@ -314,14 +248,23 @@ function JobsPage() {
     if (hasNextPage && !isFetchingNextPage) fetchNextPage();
   };
 
+  // Auto-fetch next page when swipe index nears the end
+  useEffect(() => {
+    if (isMobile && hasNextPage && !isFetchingNextPage && jobs.length - swipeIndex <= 3) {
+      fetchNextPage();
+    }
+  }, [isMobile, swipeIndex, jobs.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Reset swipe index when filters change
+  useEffect(() => {
+    setSwipeIndex(0);
+  }, [queryParams]);
+
   const selectedSaved = selectedJob ? isJobSaved(selectedJob) : false;
   const selectedKey = selectedJob ? getJobKey(selectedJob) : null;
-  const selectedAiSummary = selectedKey ? jobSummaryById[selectedKey] ?? null : null;
-  const selectedAiSummaryLoading = selectedKey ? Boolean(summaryLoadingById[selectedKey]) : false;
+  const selectedMatchScore = selectedKey ? jobMatchScoreById[selectedKey] ?? null : null;
   const selectedOptimization = selectedKey ? jobOptimizationById[selectedKey] ?? null : null;
   const selectedOptimizationLoading = selectedKey ? Boolean(optimizationLoadingById[selectedKey]) : false;
-  const navItems = ['Home', 'Swipe Feed', 'All Jobs', 'Saved Roles', 'FAQ'];
-
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove('dark');
@@ -329,239 +272,108 @@ function JobsPage() {
     window.localStorage.setItem(CONTRAST_STORAGE_KEY, String(highContrast));
   }, [highContrast]);
 
-  const contrastToggle = (
-    <Button
-      variant={highContrast ? 'default' : 'outline'}
-      size="sm"
-      onClick={() => setHighContrast((prev) => !prev)}
-      aria-label={highContrast ? 'Disable high contrast mode' : 'Enable high contrast mode'}
-      title={highContrast ? 'Disable high contrast mode' : 'Enable high contrast mode'}
-      className="min-w-28 transition-all duration-300"
-    >
-      {highContrast ? 'Contrast: On' : 'Contrast: Off'}
-    </Button>
-  );
-
-  const savedTrigger = (
-    <Button
-      variant="outline"
-      size={isMobile ? 'icon' : 'default'}
-      className={cn(
-        'border-border/70 bg-background/60 text-foreground transition-all duration-300 hover:bg-muted/60',
-        !isMobile && 'gap-2',
-        savedCount > 0 &&
-          'border-primary/50 bg-primary/10 text-foreground hover:border-primary hover:shadow-lg hover:shadow-primary/20'
-      )}
-      aria-label="Open saved jobs"
-    >
-      <Bookmark className={cn(savedCount > 0 && 'fill-primary text-primary')} />
-      {!isMobile && (
-        <>
-          Saved
-          {savedCount > 0 && (
-            <Badge variant="secondary" className="shadow-sm">
-              {savedCount}
-            </Badge>
-          )}
-        </>
-      )}
-    </Button>
-  );
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto w-full max-w-[1820px] px-3 py-6 sm:px-6 lg:px-8 2xl:px-8">
-        <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)] 2xl:grid-cols-[220px_minmax(0,1fr)_300px]">
-          <aside className="hidden lg:flex lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] flex-col rounded-[1.6rem] border border-border/70 bg-card/80 p-5 shadow-xl shadow-black/25 backdrop-blur">
-            <div>
-              <p className="font-display text-2xl font-bold tracking-tight">Renaisons Jobs</p>
-              <p className="mt-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                Discover. Match. Apply.
-              </p>
-            </div>
+    <div className="min-h-screen w-full">
+      <TopBar
+        searchQuery={q ?? ''}
+        onSearchChange={setQ}
+        activePage={activePage}
+        onPageChange={setActivePage}
+        userName="User"
+        onProfileClick={() => {
+          // Profile click handler
+        }}
+      />
 
-            <nav className="mt-8 space-y-1.5">
-              {navItems.map((item, idx) => (
-                <button
-                  key={item}
-                  type="button"
-                  className={cn(
-                    'w-full rounded-xl border px-3 py-2 text-left text-sm transition-all',
-                    idx === 0
-                      ? 'border-primary/50 bg-primary/10 text-foreground'
-                      : 'border-border/40 text-muted-foreground hover:border-border hover:bg-muted/40 hover:text-foreground'
-                  )}
-                >
-                  {item}
-                </button>
-              ))}
-            </nav>
-
-            <div className="mt-auto rounded-xl border border-border/60 bg-background/50 p-3">
-              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Status</p>
-              <p className="mt-2 text-sm text-foreground">
-                API-connected feed with stable session ordering.
-              </p>
-            </div>
-          </aside>
-
-          <main className="space-y-6">
-            <header className="rounded-[2rem] border border-border/70 bg-card/80 p-5 shadow-xl shadow-black/25 backdrop-blur sm:p-7">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="space-y-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Hiring Signal Feed
-                  </p>
-                  <h1 className="font-display text-3xl font-bold leading-[0.95] tracking-tight sm:text-5xl">
-                    Shape your job hunt around signal, not noise.
-                  </h1>
-                  <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-                    Fast role discovery, high-confidence metadata, and a swipe flow tuned for
-                    decisions.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 self-start">
-                  <SavedJobsSheet
-                    jobs={savedJobs}
-                    onSelectJob={(job) => openDetails(job)}
-                    onRemove={unsaveJob}
-                    onClearAll={clearAll}
-                    trigger={savedTrigger}
-                  />
-                  {contrastToggle}
-
-                  {isMobile && (
-                    <>
-                      <FilterSheet filters={filters} onChange={setFilters} />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setMobileMode((m) => (m === 'swipe' ? 'list' : 'swipe'))}
-                        aria-label="Toggle swipe/list view"
-                      >
-                        <LayoutGrid />
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-border/60 bg-background/45 p-3">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    Jobs Loaded
-                  </div>
-                  <p className="mt-1 text-2xl font-semibold">{jobs.length}+</p>
-                </div>
-                <div className="rounded-2xl border border-border/60 bg-background/45 p-3">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                    <Compass className="h-3.5 w-3.5" />
-                    Saved Roles
-                  </div>
-                  <p className="mt-1 text-2xl font-semibold">{savedCount}</p>
-                </div>
-                <div className="rounded-2xl border border-border/60 bg-background/45 p-3">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Feed Mode
-                  </div>
-                  <p className="mt-1 text-2xl font-semibold">Stable</p>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="rounded-full bg-background/80 px-3 py-1">
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                  Stable session feed
-                </Badge>
-                {asOf && (
-                  <Badge variant="outline" className="rounded-full bg-background/80 px-3 py-1">
-                    Snapshot {new Date(asOf).toLocaleString()}
-                  </Badge>
+      <div className="w-full px-3 py-5 sm:px-4 md:px-6 lg:px-8">
+        <main className="w-full space-y-5">
+          {/* Resume Lab — collapsible dropdown */}
+          <div className="rounded-2xl border border-white/[0.06] bg-card/80 backdrop-blur shadow-lg shadow-black/30 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setResumeLabOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-white/[0.03] transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <WandSparkles className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-sm font-semibold text-foreground">Resume Lab</span>
+                {resumeUploaded && (
+                  <span className="inline-flex items-center rounded-full bg-primary/15 border border-primary/30 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                    Ready
+                  </span>
                 )}
               </div>
-            </header>
-
-            {isMobile && (
-              <section className="rounded-[1.4rem] border border-border/70 bg-card/80 p-4 shadow-xl shadow-black/25 backdrop-blur">
+              <ChevronDown className={cn(
+                'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                resumeLabOpen && 'rotate-180'
+              )} />
+            </button>
+            {resumeLabOpen && (
+              <div className="border-t border-white/[0.05] px-5 py-4">
                 <ResumeLabPanel
                   resumeFileName={guestResume.fileName}
-                  resumeText={guestResume.text}
+                  resumeUploaded={resumeUploaded}
+                  optimizeMode={optimizeMode}
+                  onOptimizeModeChange={setOptimizeMode}
                   critiqueLevel={critiqueLevel}
                   onCritiqueLevelChange={setCritiqueLevel}
                   onUpload={handleResumeUpload}
                   onClearResume={handleClearResume}
                   onAnalyzeResume={handleAnalyzeResume}
-                  isExtracting={isResumeExtracting}
+                  isUploading={isResumeUploading}
                   isAnalyzing={isResumeAnalyzing}
                   analysis={resumeAnalysis}
+                  matchProfile={resumeMatchProfile}
                   errorMessage={resumeErrorMessage}
                 />
-              </section>
-            )}
-
-            {!isMobile && (
-              <section className="rounded-[1.7rem] border border-border/70 bg-card/80 p-4 shadow-xl shadow-black/25 backdrop-blur sm:p-5">
-                <FilterBar filters={filters} onChange={setFilters} />
-              </section>
-            )}
-
-            {!isMobile && (
-              <section className="hidden rounded-[1.7rem] border border-border/70 bg-card/80 p-4 shadow-xl shadow-black/25 backdrop-blur sm:p-5 lg:block 2xl:hidden">
-                <ResumeLabPanel
-                  resumeFileName={guestResume.fileName}
-                  resumeText={guestResume.text}
-                  critiqueLevel={critiqueLevel}
-                  onCritiqueLevelChange={setCritiqueLevel}
-                  onUpload={handleResumeUpload}
-                  onClearResume={handleClearResume}
-                  onAnalyzeResume={handleAnalyzeResume}
-                  isExtracting={isResumeExtracting}
-                  isAnalyzing={isResumeAnalyzing}
-                  analysis={resumeAnalysis}
-                  errorMessage={resumeErrorMessage}
-                />
-              </section>
-            )}
-
-            {isError && (
-              <div className="rounded-[1.4rem] border border-destructive/50 bg-destructive/10 p-6 shadow-lg shadow-black/25">
-                <div className="font-semibold text-destructive">Failed to load jobs</div>
-                <div className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                  {error instanceof Error ? error.message : 'Unknown error'}
-                </div>
-                <div className="mt-5 flex gap-2">
-                  <Button
-                    onClick={() => refetch()}
-                    variant="outline"
-                    className="hover:border-primary/50 transition-all"
-                  >
-                    Retry
-                  </Button>
-                </div>
               </div>
             )}
+          </div>
 
-            <section className="rounded-[1.7rem] border border-border/70 bg-card/80 p-4 shadow-xl shadow-black/25 backdrop-blur sm:p-5">
-              {isMobile && mode === 'swipe' ? (
-                <SwipeFeed
-                  key={feedKey}
-                  jobs={jobs}
-                  isLoading={isLoading}
-                  isFetchingNextPage={isFetchingNextPage}
-                  hasNextPage={Boolean(hasNextPage)}
-                  fetchNextPage={fetchNextPage}
-                  onSave={saveJob}
-                  onToggleSaved={toggleSaved}
-                  onOptimizeRole={handleOptimizeForRole}
-                  onDetails={openDetails}
-                  isJobSaved={isJobSaved}
-                  resumeReady={resumeReady}
-                />
-              ) : (
-                <div className="space-y-6">
+          {isError && (
+            <div className="rounded-[1.4rem] border border-destructive/50 bg-destructive/10 p-6 shadow-lg shadow-black/25">
+              <div className="font-semibold text-destructive">Failed to load jobs</div>
+              <div className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                {error instanceof Error ? error.message : 'Unknown error'}
+              </div>
+              <div className="mt-5 flex gap-2">
+                <Button
+                  onClick={() => refetch()}
+                  variant="outline"
+                  className="hover:border-primary/50 transition-all"
+                >
+                  Retry
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <JobCarousel
+            jobs={recommendedJobs}
+            isLoading={recommendedLoading}
+            onJobClick={openDetails}
+            isJobSaved={isJobSaved}
+            onToggleSaved={toggleSaved}
+          />
+
+          {isMobile ? (
+            <JobCardStack
+              jobs={jobs}
+              index={swipeIndex}
+              onAdvance={() => setSwipeIndex((i) => i + 1)}
+              onSave={toggleSaved}
+              onToggleSaved={toggleSaved}
+              onDismiss={() => {/* dismiss = just advance */}}
+              onDetails={openDetails}
+              isJobSaved={isJobSaved}
+              onOptimizeRole={handleOptimizeForRole}
+              resumeReady={resumeUploaded}
+              isFetchingNextPage={isFetchingNextPage || isLoading}
+            />
+          ) : (
+            <section className="w-full rounded-[1.7rem] border border-white/[0.06] bg-card/80 p-4 shadow-xl shadow-black/25 backdrop-blur sm:p-5">
+              <div className="space-y-6">
                   <JobGrid
                     jobs={jobs}
                     isLoading={isLoading}
@@ -569,7 +381,7 @@ function JobsPage() {
                     isJobSaved={isJobSaved}
                     onToggleSaved={toggleSaved}
                     onOptimizeRole={handleOptimizeForRole}
-                    resumeReady={resumeReady}
+                    resumeReady={resumeUploaded}
                   />
 
                   {hasNextPage && !isLoading && (
@@ -590,7 +402,7 @@ function JobsPage() {
                           <>
                             Load more jobs
                             <span className="ml-2 transition-transform group-hover:translate-y-0.5">
-                              v
+                              ↓
                             </span>
                           </>
                         )}
@@ -603,27 +415,10 @@ function JobsPage() {
                       Showing {jobs.length} job{jobs.length !== 1 ? 's' : ''}
                     </div>
                   )}
-                </div>
-              )}
+              </div>
             </section>
-          </main>
-
-          <aside className="hidden 2xl:block 2xl:sticky 2xl:top-6 2xl:h-[calc(100vh-3rem)]">
-            <ResumeLabPanel
-              resumeFileName={guestResume.fileName}
-              resumeText={guestResume.text}
-              critiqueLevel={critiqueLevel}
-              onCritiqueLevelChange={setCritiqueLevel}
-              onUpload={handleResumeUpload}
-              onClearResume={handleClearResume}
-              onAnalyzeResume={handleAnalyzeResume}
-              isExtracting={isResumeExtracting}
-              isAnalyzing={isResumeAnalyzing}
-              analysis={resumeAnalysis}
-              errorMessage={resumeErrorMessage}
-            />
-          </aside>
-        </div>
+          )}
+        </main>
       </div>
 
       <JobDetailDialog
@@ -631,16 +426,15 @@ function JobsPage() {
         onOpenChange={setDetailOpen}
         job={selectedJob}
         saved={selectedSaved}
-        aiSummary={selectedAiSummary}
-        aiSummaryLoading={selectedAiSummaryLoading}
+        matchScore={selectedMatchScore}
         optimization={selectedOptimization}
         optimizationLoading={selectedOptimizationLoading}
         onOptimizeRole={() => {
           if (!selectedJob) return;
           void handleOptimizeForRole(selectedJob);
         }}
-        resumeReady={resumeReady}
-        critiqueLevel={critiqueLevel}
+        resumeUploaded={resumeUploaded}
+        optimizeMode={optimizeMode}
         onToggleSaved={() => {
           if (!selectedJob) return;
           toggleSaved(selectedJob);

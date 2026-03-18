@@ -1,60 +1,34 @@
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function JobSkeleton() {
   return (
-    <Card className="w-full min-h-[30rem] sm:min-h-[32rem] overflow-hidden rounded-3xl border-border/70 bg-card/90 p-3.5 sm:p-4 animate-pulse">
-      <div className="flex h-full flex-col gap-3">
-        {/* Header: Company and Source */}
-        <div className="flex items-start justify-between gap-2">
+    <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-4 animate-pulse">
+      {/* Logo + company + title */}
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
+        <div className="flex-1 space-y-1.5">
           <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-5 w-16 rounded-md" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
         </div>
-
-        {/* Title */}
-        <div className="mt-3 space-y-2">
-          <Skeleton className="h-5 w-full" />
-          <Skeleton className="h-5 w-4/5" />
-        </div>
-
-        {/* Meta block */}
-        <div className="rounded-xl border border-border/60 bg-background/40 p-2.5">
-          <div className="flex flex-wrap gap-2">
-            <Skeleton className="h-6 w-24 rounded-md" />
-            <Skeleton className="h-6 w-20 rounded-md" />
-            <Skeleton className="h-6 w-28 rounded-md" />
-          </div>
-          <div className="mt-2">
-            <Skeleton className="h-4 w-40" />
-          </div>
-        </div>
-
-        {/* Attention tags */}
-        <div className="flex max-h-14 flex-wrap gap-1.5 overflow-hidden">
-          <Skeleton className="h-5 w-24 rounded-full" />
-          <Skeleton className="h-5 w-20 rounded-full" />
-          <Skeleton className="h-5 w-28 rounded-full" />
-          <Skeleton className="h-5 w-20 rounded-full" />
-        </div>
-
-        {/* Highlights block */}
-        <div className="rounded-2xl border border-border/60 bg-background/40 p-3">
-          <Skeleton className="h-3 w-28" />
-          <div className="mt-2 space-y-2">
-            {Array.from({ length: 3 }).map((_, idx) => (
-              <div key={idx} className="flex items-start gap-2">
-                <Skeleton className="mt-1.5 h-1.5 w-1.5 rounded-full" />
-                <Skeleton className="h-3 w-4/5" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-auto pt-4">
-          <Skeleton className="h-3 w-32" />
-        </div>
+        <Skeleton className="h-7 w-7 rounded-full shrink-0" />
       </div>
-    </Card>
+
+      {/* Location */}
+      <Skeleton className="h-3 w-40" />
+
+      {/* Tags */}
+      <div className="flex flex-wrap gap-1.5">
+        <Skeleton className="h-5 w-20 rounded-full" />
+        <Skeleton className="h-5 w-16 rounded-full" />
+        <Skeleton className="h-5 w-24 rounded-full" />
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between pt-1 border-t border-border/40">
+        <Skeleton className="h-3 w-24" />
+        <Skeleton className="h-6 w-20 rounded-lg" />
+      </div>
+    </div>
   );
 }

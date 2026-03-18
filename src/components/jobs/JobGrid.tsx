@@ -13,6 +13,15 @@ interface JobGridProps {
   resumeReady?: boolean;
 }
 
+// Fluid grid — columns fill automatically based on available width.
+// Each card is at least 270px wide; more columns appear as window grows.
+const gridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
+  gap: '1rem',
+  alignItems: 'start',
+} as const;
+
 export function JobGrid({
   jobs,
   isLoading,
@@ -22,18 +31,16 @@ export function JobGrid({
   onOptimizeRole,
   resumeReady = false,
 }: JobGridProps) {
-  // Loading state
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:gap-4">
-        {Array.from({ length: 6 }).map((_, index) => (
+      <div style={gridStyle}>
+        {Array.from({ length: 8 }).map((_, index) => (
           <JobSkeleton key={index} />
         ))}
       </div>
     );
   }
 
-  // Empty state
   if (jobs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 px-4">
@@ -51,9 +58,8 @@ export function JobGrid({
     );
   }
 
-  // Job grid
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:gap-4">
+    <div style={gridStyle}>
       {jobs.map((job) => (
         <JobCard
           key={job.id}

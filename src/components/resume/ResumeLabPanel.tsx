@@ -1,11 +1,14 @@
 import type { ChangeEvent } from 'react';
-import { FileText, Loader2, Trash2, Upload, WandSparkles } from 'lucide-react';
+import { CheckCircle2, FileText, Loader2, Trash2, Upload, WandSparkles } from 'lucide-react';
+import {
+  Button,
+  Card,
+  CardBody,
+  Chip,
+  Input,
+} from '@nextui-org/react';
 
-import type { CritiqueLevel, ResumeAnalysisResponse } from '@/api/types';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import type { CritiqueLevel, OptimizeMode, ResumeAnalysisResponse, ResumeMatchProfile } from '@/api/types';
 import {
   Select,
   SelectContent,
@@ -16,35 +19,41 @@ import {
 
 interface ResumeLabPanelProps {
   resumeFileName: string | null;
-  resumeText: string;
+  resumeUploaded: boolean;
+  optimizeMode: OptimizeMode;
+  onOptimizeModeChange: (value: OptimizeMode) => void;
   critiqueLevel: CritiqueLevel;
   onCritiqueLevelChange: (value: CritiqueLevel) => void;
   onUpload: (file: File) => void;
   onClearResume: () => void;
   onAnalyzeResume: () => void;
-  isExtracting: boolean;
+  isUploading: boolean;
   isAnalyzing: boolean;
   analysis: ResumeAnalysisResponse | null;
+  matchProfile: ResumeMatchProfile | null;
   errorMessage: string | null;
 }
 
-function critiqueLabel(level: CritiqueLevel): string {
-  if (level === 'light') return 'Light';
-  if (level === 'hardcore') return 'Hardcore';
-  return 'Balanced';
-}
+const OPTIMIZE_MODE_DESCRIPTIONS: Record<OptimizeMode, string> = {
+  bullets: 'Improve individual bullet points to match the role',
+  overview: 'Rewrite your professional summary for the job',
+  full_rewrite: 'Rewrite the entire resume tailored to this job',
+};
 
 export function ResumeLabPanel({
   resumeFileName,
-  resumeText,
+  resumeUploaded,
+  optimizeMode,
+  onOptimizeModeChange,
   critiqueLevel,
   onCritiqueLevelChange,
   onUpload,
   onClearResume,
   onAnalyzeResume,
-  isExtracting,
+  isUploading,
   isAnalyzing,
   analysis,
+  matchProfile,
   errorMessage,
 }: ResumeLabPanelProps) {
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -53,147 +62,216 @@ export function ResumeLabPanel({
     event.currentTarget.value = '';
   };
 
-  const ready = Boolean(resumeText.trim());
-
   return (
-    <Card className="h-full rounded-[1.3rem] border-border/70 bg-card/85 p-3 shadow-xl shadow-black/25 backdrop-blur">
-      <div className="flex h-full flex-col">
+    <Card
+      className="h-full rounded-[1.3rem] border border-white/10 bg-card/85 shadow-xl shadow-black/25 backdrop-blur"
+      shadow="none"
+    >
+      <CardBody className="flex h-full flex-col gap-3 p-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Resume Lab
           </p>
           <h3 className="mt-1 text-lg font-semibold leading-tight">AI Resume Optimization</h3>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            Guest mode: resume stays in this browser session only.
-          </p>
         </div>
 
-        <div className="mt-3 space-y-2.5">
-          <label className="block">
-            <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Upload Resume
-            </span>
-            <Input
-              type="file"
-              accept=".pdf,.docx,.txt,.md,.rtf"
-              onChange={onFileChange}
-              disabled={isExtracting}
-            />
-          </label>
+        {/* Upload */}
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Upload Resume (PDF)
+          </span>
+          <Input
+            type="file"
+            accept=".pdf"
+            onChange={onFileChange}
+            isDisabled={isUploading}
+            variant="bordered"
+            size="sm"
+            classNames={{
+              input: "text-foreground text-xs",
+              inputWrapper: "border-white/10 bg-white/5 hover:bg-white/10 data-[focus=true]:border-primary/50",
+            }}
+          />
+        </label>
 
-          <div className="rounded-xl border border-border/60 bg-background/45 p-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs text-muted-foreground">Current resume</div>
-              {resumeFileName && (
-                <Button variant="ghost" size="sm" onClick={onClearResume}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Clear
-                </Button>
+        {/* Status */}
+        <div className="rounded-xl border border-white/10 bg-background/45 p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">Current resume</div>
+            {resumeUploaded && (
+              <Button
+                variant="light"
+                size="sm"
+                onPress={onClearResume}
+                className="h-6 min-w-0 px-2 text-xs text-muted-foreground"
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Clear
+              </Button>
+            )}
+          </div>
+          <div className="mt-1.5 flex items-center gap-2 text-sm">
+            {resumeUploaded ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+            ) : (
+              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <span className="truncate text-xs">
+              {resumeFileName || (resumeUploaded ? 'Resume uploaded' : 'No resume uploaded')}
+            </span>
+          </div>
+          {/* Match profile notice */}
+          {resumeUploaded && matchProfile && (
+            <div className="mt-1.5 text-xs text-muted-foreground">
+              {matchProfile.skills_extracted ? (
+                <span className="text-emerald-600">
+                  {matchProfile.skills.length} skills extracted
+                  {matchProfile.experience_years != null ? ` · ${matchProfile.experience_years} yrs exp` : ''}
+                  {' · '}Match scoring active
+                </span>
+              ) : (
+                <span className="text-amber-500">
+                  Skills not extracted — match scoring unavailable
+                </span>
               )}
             </div>
-            <div className="mt-2 flex items-center gap-2 text-sm">
-              <FileText className="h-4 w-4 text-primary" />
-              <span className="truncate">
-                {resumeFileName || (ready ? 'Pasted resume text loaded' : 'No resume loaded')}
-              </span>
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {ready ? `${resumeText.length.toLocaleString()} chars extracted` : 'Upload to enable scoring'}
-            </div>
-          </div>
+          )}
+        </div>
 
-          <div>
-            <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Critique Level
-            </span>
-            <Select
-              value={critiqueLevel}
-              onValueChange={(v) => onCritiqueLevelChange(v as CritiqueLevel)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select critique level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="balanced">Balanced</SelectItem>
-                <SelectItem value="hardcore">Hardcore</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="mt-1 text-xs text-muted-foreground">
-              Mode: {critiqueLabel(critiqueLevel)}
-            </div>
+        {isUploading && (
+          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-background/50 p-2 text-xs text-muted-foreground">
+            <Upload className="h-3.5 w-3.5 shrink-0" />
+            Uploading and extracting profile...
           </div>
+        )}
 
+        {/* General Analysis */}
+        <div className="space-y-2">
+          <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            General Analysis
+          </span>
+          <Select value={critiqueLevel} onValueChange={(v) => onCritiqueLevelChange(v as CritiqueLevel)}>
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Critique level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="light">Light — encouraging</SelectItem>
+              <SelectItem value="balanced">Balanced — honest</SelectItem>
+              <SelectItem value="hardcore">Hardcore — brutally honest</SelectItem>
+            </SelectContent>
+          </Select>
           <Button
             className="w-full"
-            onClick={onAnalyzeResume}
-            disabled={!ready || isAnalyzing || isExtracting}
+            size="sm"
+            color="primary"
+            variant="solid"
+            onPress={onAnalyzeResume}
+            isDisabled={!resumeUploaded || isAnalyzing || isUploading}
           >
             {isAnalyzing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Analyzing...
-              </>
+              <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />Analyzing...</>
             ) : (
-              <>
-                <WandSparkles className="mr-2 h-4 w-4" />
-                Analyze Resume
-              </>
+              <><WandSparkles className="mr-1.5 h-3.5 w-3.5" />Analyze Resume</>
             )}
           </Button>
-
-          {isExtracting && (
-            <div className="rounded-lg border border-border/50 bg-background/50 p-2 text-xs text-muted-foreground">
-              <Upload className="mr-1 inline h-3.5 w-3.5" />
-              Extracting text from resume...
-            </div>
-          )}
-
-          {errorMessage && (
-            <div className="rounded-lg border border-destructive/35 bg-destructive/10 p-2 text-xs text-destructive">
-              {errorMessage}
-            </div>
-          )}
         </div>
 
-        <div className="mt-3 min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-background/45 p-2.5">
-          {!analysis ? (
-            <div className="text-xs leading-relaxed text-muted-foreground">
-              Run a general analysis to get baseline score, strengths, and improvements.
+        {/* Analysis results */}
+        {analysis && (
+          <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-white/10 bg-background/45 p-2.5 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-foreground">General Score</span>
+              <Chip
+                size="sm"
+                variant="solid"
+                color="primary"
+                className="text-xs"
+              >
+                {analysis.score}/100
+              </Chip>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-semibold">General Score</div>
-                <Badge className="bg-primary/90 text-primary-foreground">{analysis.score}/100</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground">{analysis.headline}</p>
+            <p className="text-xs text-muted-foreground italic">{analysis.headline}</p>
 
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Top Strengths
-                </div>
-                <ul className="mt-1 space-y-1 text-xs">
-                  {analysis.strengths.slice(0, 3).map((item, idx) => (
-                    <li key={`s-${idx}`} className="leading-relaxed">- {item}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Priority Actions
-                </div>
-                <ul className="mt-1 space-y-1 text-xs">
-                  {analysis.priority_actions.slice(0, 3).map((item, idx) => (
-                    <li key={`a-${idx}`} className="leading-relaxed">- {item}</li>
-                  ))}
-                </ul>
-              </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Strengths</p>
+              <ul className="mt-1 space-y-0.5">
+                {analysis.strengths.slice(0, 3).map((s, i) => (
+                  <li key={i} className="text-xs leading-relaxed">+ {s}</li>
+                ))}
+              </ul>
             </div>
-          )}
-        </div>
-      </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Gaps</p>
+              <ul className="mt-1 space-y-0.5">
+                {analysis.gaps.slice(0, 3).map((g, i) => (
+                  <li key={i} className="text-xs leading-relaxed text-muted-foreground">- {g}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Priority Actions</p>
+              <ul className="mt-1 space-y-0.5">
+                {analysis.priority_actions.slice(0, 3).map((a, i) => (
+                  <li key={i} className="text-xs leading-relaxed">→ {a}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* No analysis yet — show optimize mode selector + instructions */}
+        {!analysis && (
+          <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-white/10 bg-background/45 p-2.5 space-y-2.5">
+            <div>
+              <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
+                Role Optimization Mode
+              </span>
+              <Select value={optimizeMode} onValueChange={(v) => onOptimizeModeChange(v as OptimizeMode)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bullets">Bullet improvements</SelectItem>
+                  <SelectItem value="overview">Summary rewrite</SelectItem>
+                  <SelectItem value="full_rewrite">Full resume rewrite</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">{OPTIMIZE_MODE_DESCRIPTIONS[optimizeMode]}</p>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Upload a resume, then click <span className="font-medium text-foreground">Optimize For This Role</span> on any job card or in the job detail view.
+            </p>
+          </div>
+        )}
+
+        {/* Optimize mode selector shown below analysis when analysis is visible */}
+        {analysis && (
+          <div className="space-y-1.5">
+            <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Role Optimization Mode
+            </span>
+            <Select value={optimizeMode} onValueChange={(v) => onOptimizeModeChange(v as OptimizeMode)}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="Select mode" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bullets">Bullet improvements</SelectItem>
+                <SelectItem value="overview">Summary rewrite</SelectItem>
+                <SelectItem value="full_rewrite">Full resume rewrite</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Error */}
+        {errorMessage && (
+          <div className="rounded-lg border border-destructive/35 bg-destructive/10 p-2 text-xs text-destructive">
+            {errorMessage}
+          </div>
+        )}
+      </CardBody>
     </Card>
   );
 }
