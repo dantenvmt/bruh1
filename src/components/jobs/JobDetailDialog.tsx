@@ -1,15 +1,22 @@
-import { formatDistanceToNow } from 'date-fns';
-import { Bookmark, BookmarkCheck, ExternalLink, Loader2, MapPin, Sparkles, WandSparkles } from 'lucide-react';
+import { type ReactNode } from 'react';
+import { ExternalLink, Loader2, MapPin, Sparkles, WandSparkles } from 'lucide-react';
 import {
   Button,
-  Chip,
   Modal,
-  ModalContent,
   ModalBody,
+  ModalContent,
   ModalFooter,
 } from '@nextui-org/react';
 
 import type { Job, JobMatchResponse, OptimizeMode, ResumeOptimizeResponse } from '@/api/types';
+import {
+  buildJobTags,
+  extractSkillTags,
+  formatEmploymentType,
+  formatPostedDate,
+  getJobSummaryBullets,
+  getTagClasses,
+} from '@/lib/jobPresentation';
 import { cn } from '@/lib/utils';
 
 interface JobDetailDialogProps {
@@ -26,29 +33,51 @@ interface JobDetailDialogProps {
   optimizeMode: OptimizeMode;
 }
 
-function formatPosted(dateString: string | null): string {
-  if (!dateString) return 'Recently';
-  try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
-  } catch {
-    return 'Recently';
-  }
+const MODE_LABELS: Record<OptimizeMode, string> = {
+  bullets: 'Bullet Improvements',
+  overview: 'Summary Rewrite',
+  full_rewrite: 'Full Rewrite',
+};
+
+function getFitBandClasses(band: string): string {
+  if (band === 'strong') return 'border-emerald-400/25 bg-emerald-400/12 text-emerald-100';
+  if (band === 'good') return 'border-sky-300/25 bg-sky-300/12 text-sky-100';
+  if (band === 'moderate') return 'border-amber-300/25 bg-amber-300/12 text-amber-100';
+  return 'border-white/10 bg-white/[0.05] text-white/68';
+}
+
+function Section({
+  label,
+  title,
+  children,
+}: {
+  label: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-[1.5rem] border border-white/10 bg-black/10 p-5">
+      <div className="text-[11px] uppercase tracking-[0.24em] text-white/42">{label}</div>
+      <h3 className="mt-2 text-lg font-semibold text-foreground">{title}</h3>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
 }
 
 function OptimizationResult({ optimization }: { optimization: ResumeOptimizeResponse }) {
   if (optimization.mode === 'bullets') {
     return (
       <div className="space-y-3">
-        <p className="text-xs text-muted-foreground">{optimization.suggestions.length} bullet improvements</p>
+        <p className="text-sm text-white/55">{optimization.suggestions.length} bullet improvements generated</p>
         <ul className="space-y-3">
-          {optimization.suggestions.map((s, idx) => (
-            <li key={idx} className="space-y-1 rounded-lg border border-white/10 bg-background/40 p-2.5 text-sm">
-              <div className="text-muted-foreground line-through">{s.original}</div>
-              <div className="flex items-start gap-2">
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                <span>{s.improved}</span>
+          {optimization.suggestions.map((suggestion, index) => (
+            <li key={index} className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
+              <div className="text-sm line-through text-white/42">{suggestion.original}</div>
+              <div className="mt-3 flex items-start gap-3">
+                <Sparkles className="mt-1 h-4 w-4 shrink-0 text-primary" />
+                <div className="text-sm leading-7 text-foreground">{suggestion.improved}</div>
               </div>
-              <div className="text-xs text-muted-foreground italic">{s.reason}</div>
+              <div className="mt-3 text-sm text-white/52">{suggestion.reason}</div>
             </li>
           ))}
         </ul>
@@ -57,26 +86,28 @@ function OptimizationResult({ optimization }: { optimization: ResumeOptimizeResp
   }
 
   if (optimization.mode === 'overview') {
-    const s = optimization.suggestions;
     return (
-      <div className="space-y-3 text-sm">
+      <div className="space-y-5 text-sm">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Original</p>
-          <p className="mt-1 text-muted-foreground">{s.original_summary}</p>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-white/42">Original</div>
+          <p className="mt-2 leading-7 text-white/58">{optimization.suggestions.original_summary}</p>
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Optimized</p>
-          <div className="mt-1 flex items-start gap-2">
-            <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-            <p>{s.optimized_summary}</p>
+          <div className="text-[11px] uppercase tracking-[0.22em] text-white/42">Optimized</div>
+          <div className="mt-2 flex items-start gap-3 rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
+            <Sparkles className="mt-1 h-4 w-4 shrink-0 text-primary" />
+            <p className="leading-7 text-foreground">{optimization.suggestions.optimized_summary}</p>
           </div>
         </div>
-        {s.key_changes.length > 0 && (
+        {optimization.suggestions.key_changes.length > 0 && (
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Key Changes</p>
-            <ul className="mt-1 space-y-1">
-              {s.key_changes.map((change, idx) => (
-                <li key={idx} className="text-xs text-muted-foreground">• {change}</li>
+            <div className="text-[11px] uppercase tracking-[0.22em] text-white/42">Key Changes</div>
+            <ul className="mt-3 space-y-2">
+              {optimization.suggestions.key_changes.map((change, index) => (
+                <li key={index} className="flex gap-3 text-sm text-white/62">
+                  <span className="mt-2 h-1.5 w-1.5 rounded-full bg-white/38 shrink-0" />
+                  <span>{change}</span>
+                </li>
               ))}
             </ul>
           </div>
@@ -85,26 +116,11 @@ function OptimizationResult({ optimization }: { optimization: ResumeOptimizeResp
     );
   }
 
-  // full_rewrite
   return (
-    <div className="space-y-2">
-      <p className="text-xs text-muted-foreground">Full rewritten resume</p>
-      <pre className="whitespace-pre-wrap text-xs leading-relaxed">{optimization.optimized_resume}</pre>
+    <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.04] p-4">
+      <pre className="whitespace-pre-wrap text-sm leading-7 text-foreground">{optimization.optimized_resume}</pre>
     </div>
   );
-}
-
-const MODE_LABELS: Record<OptimizeMode, string> = {
-  bullets: 'Bullet Improvements',
-  overview: 'Summary Rewrite',
-  full_rewrite: 'Full Rewrite',
-};
-
-function FitBandColor(band: string): string {
-  if (band === 'strong') return 'bg-emerald-500/20 text-emerald-700 border-emerald-500/30';
-  if (band === 'good') return 'bg-blue-500/20 text-blue-700 border-blue-500/30';
-  if (band === 'moderate') return 'bg-amber-500/20 text-amber-700 border-amber-500/30';
-  return 'bg-white/5 text-muted-foreground border-white/10';
 }
 
 export function JobDetailDialog({
@@ -120,23 +136,21 @@ export function JobDetailDialog({
   resumeUploaded,
   optimizeMode,
 }: JobDetailDialogProps) {
-  const summary = job?.ai_summary_detail ?? null;
-  // Empty state
   if (!job) {
     return (
       <Modal
         isOpen={open}
         onOpenChange={onOpenChange}
         classNames={{
-          base: "border border-white/10 bg-[#0d1117]/90 backdrop-blur-md",
-          closeButton: "text-muted-foreground hover:text-foreground hover:bg-white/10",
+          base: 'border border-white/10 bg-[linear-gradient(180deg,rgba(12,21,35,0.96),rgba(7,14,24,0.92))] backdrop-blur-2xl',
+          closeButton: 'text-white/52 hover:text-foreground hover:bg-white/[0.08]',
         }}
       >
         <ModalContent>
           {() => (
-            <ModalBody className="py-6">
-              <p className="text-lg font-semibold text-foreground">Job details</p>
-              <p className="text-sm text-muted-foreground">Nothing selected.</p>
+            <ModalBody className="py-8">
+              <p className="font-display text-2xl text-foreground">Job details</p>
+              <p className="text-sm text-white/55">Nothing selected.</p>
             </ModalBody>
           )}
         </ModalContent>
@@ -145,250 +159,209 @@ export function JobDetailDialog({
   }
 
   const companyLabel = job.company || 'Unknown company';
-  const posted = formatPosted(job.posted_date);
-  const skills = job.skills ?? [];
-  const tags = job.tags ?? [];
+  const posted = formatPostedDate(job.posted_date);
+  const skillTags = extractSkillTags(job, 6);
+  const metaTags = buildJobTags(job);
+  const summaryBullets = getJobSummaryBullets(job, 4);
+  const employmentType = formatEmploymentType(job.employment_type);
+  const attentionTags = job.ai_summary_detail?.attention_tags ?? [];
 
   return (
     <Modal
       isOpen={open}
       onOpenChange={onOpenChange}
-      size="4xl"
+      size="5xl"
       scrollBehavior="inside"
       classNames={{
-        base: "border border-white/10 bg-[#0d1117]/90 backdrop-blur-md max-h-[88vh]",
-        closeButton: "text-muted-foreground hover:text-foreground hover:bg-white/10 z-10",
-        body: "px-6 py-4 space-y-3",
-        footer: "border-t border-white/10 px-6 pb-6 gap-2",
+        base: 'border border-white/10 bg-[linear-gradient(180deg,rgba(12,21,35,0.96),rgba(7,14,24,0.92))] backdrop-blur-2xl max-h-[90vh]',
+        closeButton: 'text-white/52 hover:text-foreground hover:bg-white/[0.08] z-10',
+        body: 'px-6 py-5',
+        footer: 'border-t border-white/10 px-6 py-5',
       }}
     >
       <ModalContent>
-        {(_onClose) => (
+        {() => (
           <>
-            {/* Custom header rendered inside ModalBody for layout control */}
             <ModalBody>
-              {/* Header section */}
-              <div className="flex items-start justify-between gap-3 pt-2 pr-8">
-                <div className="min-w-0">
-                  <h2 className="text-xl font-semibold leading-tight text-foreground">{job.title}</h2>
-                  <p className="mt-1 text-sm">
-                    <span className="font-medium text-foreground">{companyLabel}</span>
-                  </p>
+              <div className="space-y-5">
+                <section className="rounded-[1.8rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="max-w-3xl">
+                      <div className="text-[11px] uppercase tracking-[0.24em] text-white/42">
+                        {job.source || 'Aggregated'}
+                      </div>
+                      <h2 className="mt-3 font-display text-4xl leading-none text-foreground">{job.title}</h2>
+                      <div className="mt-4 text-base font-medium text-white/74">{companyLabel}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-white/52">
+                        {job.location && (
+                          <span className="inline-flex items-center gap-2">
+                            <MapPin className="h-4 w-4" />
+                            {job.location}
+                          </span>
+                        )}
+                        {employmentType && <span>{employmentType}</span>}
+                        <span>{posted}</span>
+                      </div>
+                    </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {job.location && (
-                      <Chip
-                        variant="flat"
-                        size="sm"
-                        startContent={<MapPin className="h-3.5 w-3.5" />}
-                        classNames={{ base: "bg-white/5 border border-white/10 text-foreground" }}
+                    <button
+                      type="button"
+                      onClick={onToggleSaved}
+                      className={cn(
+                        'rounded-full border px-4 py-2 text-sm font-medium transition-all',
+                        saved
+                          ? 'border-white/16 bg-white/[0.14] text-foreground'
+                          : 'border-white/10 bg-white/[0.05] text-white/65 hover:border-white/16 hover:bg-white/[0.09] hover:text-foreground'
+                      )}
+                    >
+                      {saved ? 'Saved' : 'Save role'}
+                    </button>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {metaTags.map((tag) => (
+                      <span
+                        key={tag.label}
+                        className={cn('inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium', getTagClasses(tag.tone))}
                       >
-                        <span className="truncate max-w-[240px]">{job.location}</span>
-                      </Chip>
-                    )}
-                    {job.remote && (
-                      <Chip variant="flat" size="sm" classNames={{ base: "bg-white/5 border border-white/10 text-foreground" }}>
-                        Remote
-                      </Chip>
-                    )}
-                    {job.employment_type && (
-                      <Chip variant="flat" size="sm" classNames={{ base: "bg-white/5 border border-white/10 text-foreground" }}>
-                        {job.employment_type}
-                      </Chip>
-                    )}
-                    {job.salary && (
-                      <Chip variant="flat" size="sm" classNames={{ base: "bg-white/5 border border-white/10 text-foreground" }}>
-                        {job.salary}
-                      </Chip>
-                    )}
-                    <Chip variant="flat" size="sm" classNames={{ base: "bg-white/5 border border-white/10 text-foreground" }}>
-                      {posted}
-                    </Chip>
+                        {tag.label}
+                      </span>
+                    ))}
                     {matchScore && (
-                      <Chip
-                        variant="flat"
-                        size="sm"
-                        startContent={<Sparkles className="h-3 w-3" />}
-                        classNames={{ base: cn("border", FitBandColor(matchScore.fit_band)) }}
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium',
+                          getFitBandClasses(matchScore.fit_band),
+                        )}
                         title={`Match score: ${matchScore.match_score}/100`}
                       >
                         {matchScore.match_score}% match · {matchScore.fit_band}
-                      </Chip>
+                      </span>
+                    )}
+                  </div>
+                </section>
+
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+                  <div className="space-y-5">
+                    <Section label="Summary" title="Role overview">
+                      {summaryBullets.length > 0 ? (
+                        <ul className="space-y-3">
+                          {summaryBullets.map((point, index) => (
+                            <li key={index} className="flex gap-3 text-sm leading-7 text-white/68">
+                              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-white/38 shrink-0" />
+                              <span>{point}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm leading-7 text-white/58">
+                          No summary is available yet for this role.
+                        </p>
+                      )}
+                    </Section>
+
+                    <Section label="Description" title="Full posting">
+                      <div className="whitespace-pre-wrap text-sm leading-7 text-white/68">
+                        {job.description || 'No description provided.'}
+                      </div>
+                    </Section>
+                  </div>
+
+                  <div className="space-y-5">
+                    <Section label="Signal set" title="Skills and attention tags">
+                      {skillTags.length > 0 && (
+                        <div>
+                          <div className="text-[11px] uppercase tracking-[0.22em] text-white/42">Skills</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {skillTags.map((skill) => (
+                              <span
+                                key={skill}
+                                className="inline-flex items-center rounded-full border border-cyan-200/15 bg-cyan-200/10 px-2.5 py-1 text-[11px] font-medium text-cyan-50"
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {attentionTags.length > 0 && (
+                        <div className="mt-5">
+                          <div className="text-[11px] uppercase tracking-[0.22em] text-white/42">Attention tags</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {attentionTags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium text-white/72"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </Section>
+
+                    {(optimization || optimizationLoading) && (
+                      <Section label="Resume Lab" title="Optimization output">
+                        {optimizationLoading ? (
+                          <div className="flex items-center gap-3 text-sm text-white/58">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Tailoring your resume to this role...
+                          </div>
+                        ) : optimization ? (
+                          <OptimizationResult optimization={optimization} />
+                        ) : null}
+                      </Section>
                     )}
                   </div>
                 </div>
-
-                <Button
-                  isIconOnly
-                  variant={saved ? 'solid' : 'bordered'}
-                  aria-label={saved ? 'Unsave job' : 'Save job'}
-                  onPress={onToggleSaved}
-                  className={cn(
-                    'transition-all duration-300 shrink-0',
-                    saved && 'bg-emerald-600 border-emerald-600 hover:bg-emerald-600/90 shadow-lg shadow-emerald-600/30',
-                    !saved && 'border-white/20 hover:border-emerald-500/50 hover:text-emerald-500'
-                  )}
-                >
-                  {saved
-                    ? <BookmarkCheck className="transition-transform scale-110" />
-                    : <Bookmark className="transition-transform hover:scale-110" />
-                  }
-                </Button>
               </div>
-
-              {/* AI Summary */}
-              {summary && (
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    AI Job Summary
-                  </p>
-                  <p className="mt-3 text-sm leading-relaxed">{summary.summary_short}</p>
-                  <ul className="mt-3 space-y-1.5">
-                    {summary.summary_bullets.map((point, idx) => (
-                      <li key={idx} className="flex items-start gap-2 text-sm">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/80" />
-                        <span>{point}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {summary.attention_tags.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {summary.attention_tags.map((tag) => (
-                        <Chip
-                          key={tag}
-                          variant="flat"
-                          size="sm"
-                          classNames={{
-                            base: "border border-primary/25 bg-primary/10 uppercase",
-                            content: "text-[10px] tracking-wide",
-                          }}
-                        >
-                          {tag}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Full Description */}
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-inner">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Full Description
-                </p>
-                <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed">
-                  {job.description || 'No description provided.'}
-                </div>
-              </div>
-
-              {/* Skills & Tags */}
-              {(skills.length > 0 || tags.length > 0) && (
-                <div className="space-y-2">
-                  {skills.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {skills.map((skill, idx) => (
-                        <Chip
-                          key={`${skill}-${idx}`}
-                          variant="flat"
-                          size="sm"
-                          classNames={{ base: "bg-white/5 border border-white/10 text-foreground" }}
-                        >
-                          {skill}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-                  {tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {tags.map((tag, idx) => (
-                        <Chip
-                          key={`${tag}-${idx}`}
-                          variant="flat"
-                          size="sm"
-                          classNames={{ base: "bg-white/5 border border-white/10 text-foreground" }}
-                        >
-                          {tag}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Resume Optimization Results */}
-              {(optimization || optimizationLoading) && (
-                <div className="rounded-xl border border-primary/25 bg-primary/10 p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      Resume Optimization
-                    </p>
-                    {optimization && (
-                      <Chip
-                        variant="flat"
-                        size="sm"
-                        classNames={{
-                          base: "border border-white/10 bg-white/5 uppercase",
-                          content: "text-[10px] tracking-wide text-foreground",
-                        }}
-                      >
-                        {MODE_LABELS[optimization.mode]}
-                      </Chip>
-                    )}
-                  </div>
-                  {optimizationLoading ? (
-                    <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Tailoring your resume to this role...
-                    </div>
-                  ) : optimization ? (
-                    <div className="mt-3">
-                      <OptimizationResult optimization={optimization} />
-                    </div>
-                  ) : null}
-                </div>
-              )}
             </ModalBody>
 
-            <ModalFooter className="flex-wrap">
-              <Button
-                variant="bordered"
-                onPress={onOptimizeRole}
-                isDisabled={!resumeUploaded || optimizationLoading}
-                title={resumeUploaded ? `Optimize resume (${MODE_LABELS[optimizeMode]})` : 'Upload a resume in Resume Lab first'}
-                className="border-white/20 text-foreground hover:border-white/40"
-              >
-                {optimizationLoading ? (
-                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                ) : (
-                  <WandSparkles className="mr-1 h-4 w-4" />
-                )}
-                Optimize For This Role
-              </Button>
-              <Button
-                variant="bordered"
-                onPress={() => onOpenChange(false)}
-                className="border-white/20 text-foreground hover:border-white/40 transition-all hover:scale-105"
-              >
-                Close
-              </Button>
-              {job.url ? (
+            <ModalFooter className="flex-wrap justify-between gap-3">
+              <div className="text-sm text-white/45">Mode: {MODE_LABELS[optimizeMode]}</div>
+              <div className="flex flex-wrap gap-3">
                 <Button
-                  as="a"
-                  href={job.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  color="primary"
-                  variant="solid"
-                  className="transition-all hover:scale-105 hover:shadow-lg hover:shadow-primary/30"
-                  endContent={<ExternalLink className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />}
+                  variant="bordered"
+                  onPress={onOptimizeRole}
+                  isDisabled={!resumeUploaded || optimizationLoading}
+                  title={resumeUploaded ? `Optimize resume (${MODE_LABELS[optimizeMode]})` : 'Upload a resume in Resume Lab first'}
+                  className="border-white/12 bg-white/[0.05] text-foreground hover:bg-white/[0.08]"
                 >
-                  Apply
+                  {optimizationLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <WandSparkles className="mr-2 h-4 w-4" />
+                  )}
+                  Optimize For This Role
                 </Button>
-              ) : (
-                <Button color="primary" variant="solid" isDisabled>
-                  Apply <ExternalLink className="ml-1 h-4 w-4" />
+                <Button
+                  variant="bordered"
+                  onPress={() => onOpenChange(false)}
+                  className="border-white/12 bg-white/[0.05] text-foreground hover:bg-white/[0.08]"
+                >
+                  Close
                 </Button>
-              )}
+                {job.url ? (
+                  <Button
+                    as="a"
+                    href={job.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    color="primary"
+                    variant="solid"
+                    className="bg-white text-slate-950 hover:bg-white/90"
+                    endContent={<ExternalLink className="h-4 w-4" />}
+                  >
+                    Apply
+                  </Button>
+                ) : (
+                  <Button color="primary" variant="solid" isDisabled className="bg-white text-slate-950/70">
+                    Apply
+                  </Button>
+                )}
+              </div>
             </ModalFooter>
           </>
         )}

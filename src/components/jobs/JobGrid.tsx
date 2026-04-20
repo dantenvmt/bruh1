@@ -1,7 +1,8 @@
 import { Briefcase } from 'lucide-react';
+
+import type { Job } from '@/api/types';
 import { JobCard } from './JobCard';
 import { JobSkeleton } from './JobSkeleton';
-import type { Job } from '@/api/types';
 
 interface JobGridProps {
   jobs: Job[];
@@ -13,12 +14,10 @@ interface JobGridProps {
   resumeReady?: boolean;
 }
 
-// Fluid grid — columns fill automatically based on available width.
-// Each card is at least 270px wide; more columns appear as window grows.
 const gridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
-  gap: '1rem',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 310px), 1fr))',
+  gap: '1.25rem',
   alignItems: 'start',
 } as const;
 
@@ -43,15 +42,15 @@ export function JobGrid({
 
   if (jobs.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 px-4">
+      <div className="flex flex-col items-center justify-center rounded-[1.8rem] border border-white/10 bg-black/10 px-4 py-20">
         <div className="relative">
-          <div className="absolute inset-0 blur-2xl bg-primary/20 rounded-full animate-pulse" />
-          <div className="relative rounded-3xl border border-border/60 bg-gradient-to-br from-muted/70 to-background/70 p-8 mb-6 shadow-xl shadow-black/25">
-            <Briefcase className="w-16 h-16 text-muted-foreground/70" />
+          <div className="absolute inset-0 rounded-full bg-primary/20 blur-2xl animate-pulse" />
+          <div className="relative mb-6 rounded-[1.8rem] border border-white/10 bg-white/[0.05] p-8 shadow-[0_20px_60px_-35px_rgba(0,0,0,0.9)] backdrop-blur-xl">
+            <Briefcase className="h-16 w-16 text-muted-foreground/70" />
           </div>
         </div>
-        <h3 className="text-2xl font-semibold mb-3 text-center">No jobs found</h3>
-        <p className="text-muted-foreground text-center max-w-md leading-relaxed">
+        <h3 className="mb-3 font-display text-3xl text-center text-foreground">No jobs found</h3>
+        <p className="max-w-md text-center leading-relaxed text-white/55">
           Try adjusting your filters or search terms to find more opportunities.
         </p>
       </div>

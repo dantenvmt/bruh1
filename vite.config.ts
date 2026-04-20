@@ -11,7 +11,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173, // Fixed dev port to match backend CORS
-    strictPort: true, // Do not auto-fallback to 5174+
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: 'http://3.22.63.34:8000',
+        changeOrigin: true,
+      },
+    },
   },
 })

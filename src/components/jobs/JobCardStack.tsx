@@ -115,14 +115,13 @@ function JobSwipeCard({
   return (
     <Card
       className={cn(
-        'relative h-full w-full rounded-[2rem] border-0 bg-card/95 p-6 shadow-2xl shadow-black/50',
+        'relative h-full w-full rounded-[2rem] border-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.035))] p-6 shadow-2xl shadow-black/50',
         'backdrop-blur-sm transition-all cursor-pointer',
-        // flame gradient border via pseudo-element workaround using outline + ring
         '[background-clip:padding-box]',
         'ring-1 ring-white/[0.07]',
       )}
       style={{
-        boxShadow: '0 0 0 1px rgba(255,97,84,0.18), 0 25px 50px -12px rgba(0,0,0,0.6), 0 8px 24px rgba(253,41,107,0.06)',
+        boxShadow: '0 0 0 1px rgba(171,227,244,0.14), 0 25px 50px -12px rgba(0,0,0,0.6), 0 8px 24px rgba(171,227,244,0.08)',
       }}
       onClick={onOpen}
       role="button"
@@ -142,7 +141,7 @@ function JobSwipeCard({
               {job.employment_type && (
                 <>
                   <span className="h-1 w-1 rounded-full bg-muted-foreground/70" />
-                  <span className="capitalize">{job.employment_type}</span>
+                  <span>{job.employment_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
                 </>
               )}
             </div>
@@ -507,11 +506,11 @@ export function JobCardStack({
           </Button>
           <Button
             className="h-12 border-0 text-white font-semibold shadow-lg transition-all hover:scale-105 hover:brightness-110"
-            style={{ background: 'linear-gradient(135deg, #FF6154, #FD296B)', boxShadow: '0 4px 20px rgba(253,41,107,0.35)' }}
+            style={{ background: 'linear-gradient(135deg, rgba(173,234,252,0.92), rgba(98,184,205,0.88))', boxShadow: '0 4px 20px rgba(121,210,233,0.35)', color: '#082033' }}
             onClick={() => void handleDecision('right', current)}
             aria-label="Match job"
           >
-            <Heart className="fill-white" />
+            <Heart className="fill-current" />
             Match
           </Button>
         </div>

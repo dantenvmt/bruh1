@@ -27,8 +27,8 @@ function getApiUrl(): string {
     }
   }
 
-  // Fallback to Vite env variable for local development
-  return import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  // Fallback to Vite env variable; empty string = use relative URL (proxied by Vite in dev)
+  return import.meta.env.VITE_API_URL || '';
 }
 
 /**
@@ -38,7 +38,9 @@ function buildUrl(endpoint: string, params?: Record<string, unknown>): string {
   const baseUrl = getApiUrl();
   const cleanBase = baseUrl.replace(/\/+$/, '');
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = new URL(`${cleanBase}${cleanEndpoint}`);
+  // When baseUrl is empty, use window.location.origin so relative URLs work (Vite proxy)
+  const base = cleanBase || (typeof window !== 'undefined' ? window.location.origin : '');
+  const url = new URL(`${base}${cleanEndpoint}`);
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
@@ -87,7 +89,7 @@ async function fetchApi<T>(url: string, options?: RequestInit): Promise<T> {
  * Fetch jobs with cursor pagination
  */
 export async function fetchJobs(params?: JobsQueryParams): Promise<JobsResponse> {
-  const url = buildUrl('/api/v1/jobs', params as Record<string, unknown>);
+  const url = buildUrl('/api/v1/jobs', { active_only: false, stale_after_days: 60, ...params as Record<string, unknown> });
   return fetchApi<JobsResponse>(url);
 }
 
@@ -95,7 +97,7 @@ export async function fetchJobs(params?: JobsQueryParams): Promise<JobsResponse>
  * Fetch recommended jobs based on user preferences algorithm
  */
 export async function fetchRecommendedJobs(params?: JobsQueryParams): Promise<JobsResponse> {
-  const url = buildUrl('/api/v1/jobs/recommended', params as Record<string, unknown>);
+  const url = buildUrl('/api/v1/jobs/recommended', { active_only: false, stale_after_days: 60, ...params as Record<string, unknown> });
   return fetchApi<JobsResponse>(url);
 }
 
